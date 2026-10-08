@@ -29,9 +29,11 @@ The two `cat > ... <<LAUNCHER` heredocs are unquoted, so `$` expands at setup ti
 
 Consequences: changing `MODEL_REPO`, `MODEL_FILE`, or `ALIAS` needs a re-run of setup.sh. `CTX` and `PORT` can be overridden per launcher run. Both launchers must be started with the same `PORT`.
 
+The defaults for `MODEL_REPO`/`MODEL_FILE`/`ALIAS`/`CTX` depend on detected memory (`MEM_GB < 24` → Qwen3.5-9B, `CTX=65536`; otherwise Qwen3.6-35B-A3B, `CTX=131072`), so the re-run rule also applies when moving between machines. Memory detection must stay above the defaults block.
+
 ## Keep README.md in sync with setup.sh
 
-Model repo/file/alias, default `CTX` and `PORT`, model file size, the `llama-server` flags, the harness and its install method, and the reasons for them appear in both files. Change both. Run `/sync-readme` to check.
+Model repo/file/alias, default `CTX` and `PORT`, model file size, both memory profiles and the threshold that selects them, the `llama-server` flags, the harness and its install method, and the reasons for them appear in both files. Change both. Run `/sync-readme` to check.
 
 ## Conventions
 

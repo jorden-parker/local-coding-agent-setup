@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
-# Local coding agent setup for Apple Silicon Macs (tested target: MacBook Pro M4 Pro, 48 GB).
-# Installs llama.cpp + Qwen Code, downloads Qwen3.6-35B-A3B (fast MoE), and creates
-# two launchers:
+# Local coding agent setup for Apple Silicon Macs.
+# Tested targets: MacBook Pro M4 Pro 48 GB and MacBook Air M1 16 GB.
+# Installs llama.cpp + Qwen Code, downloads a Qwen GGUF model, and creates two launchers:
 #   llama-coder   -> starts the local model server on http://localhost:8080
 #   qwen-local    -> runs Qwen Code against that server
+#
+# The model is picked from detected memory:
+#   < 24 GB  -> Qwen3.5-9B UD-Q4_K_XL (6.0 GB), CTX=65536
+#   >= 24 GB -> Qwen3.6-35B-A3B UD-Q4_K_XL (22.4 GB), CTX=131072
 #
 # Re-runnable. Override defaults with env vars, e.g.:
 #   CTX=65536 ./setup.sh
 #   MODEL_REPO=unsloth/Qwen3.8-27B-GGUF MODEL_FILE=Qwen3.8-27B-UD-Q4_K_XL.gguf ALIAS=qwen3.8-27b ./setup.sh
+#   MODEL_REPO=unsloth/Qwen3.5-9B-GGUF MODEL_FILE=Qwen3.5-9B-UD-Q4_K_XL.gguf ALIAS=qwen3.5-9b ./setup.sh   # small model on a big machine
 set -euo pipefail
-
-MODEL_REPO="${MODEL_REPO:-unsloth/Qwen3.6-35B-A3B-GGUF}"
-MODEL_FILE="${MODEL_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
-ALIAS="${ALIAS:-qwen3.6-35b-a3b}"
-CTX="${CTX:-131072}"          # context window in tokens; lower to 65536 if memory is tight
-PORT="${PORT:-8080}"
-MODELS_DIR="${MODELS_DIR:-$HOME/models}"
-BIN_DIR="$HOME/.local/bin"
 
 log() { printf '\n==> %s\n' "$*"; }
 
@@ -25,7 +22,29 @@ log() { printf '\n==> %s\n' "$*"; }
 [[ "$(uname -m)" == "arm64" ]]  || { echo "This script needs an Apple Silicon Mac."; exit 1; }
 MEM_GB=$(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))
 log "Detected $(sysctl -n machdep.cpu.brand_string), ${MEM_GB} GB unified memory"
-if (( MEM_GB < 32 )); then
+
+# --- defaults, chosen by memory profile ----------------------------------------
+if (( MEM_GB < 24 )); then
+  # 16 GB profile (MacBook Air M1). macOS caps Metal's wired GPU memory at ~10.7 GB on a
+  # 16 GB machine, so the 22 GB MoE file cannot load (even its 12.3 GB Q2 quant is too big).
+  # Qwen3.5-9B UD-Q4_K_XL (6.0 GB) + 64k f16 KV cache (~2 GB) fits.
+  MODEL_REPO="${MODEL_REPO:-unsloth/Qwen3.5-9B-GGUF}"
+  MODEL_FILE="${MODEL_FILE:-Qwen3.5-9B-UD-Q4_K_XL.gguf}"
+  ALIAS="${ALIAS:-qwen3.5-9b}"
+  CTX="${CTX:-65536}"           # context window in tokens; 131072 needs ~4 GB KV, right at the Metal limit
+  PROFILE="16 GB (Qwen3.5-9B)"
+else
+  MODEL_REPO="${MODEL_REPO:-unsloth/Qwen3.6-35B-A3B-GGUF}"
+  MODEL_FILE="${MODEL_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
+  ALIAS="${ALIAS:-qwen3.6-35b-a3b}"
+  CTX="${CTX:-131072}"          # context window in tokens; lower to 65536 if memory is tight
+  PROFILE="32 GB+ (Qwen3.6-35B-A3B)"
+fi
+PORT="${PORT:-8080}"
+MODELS_DIR="${MODELS_DIR:-$HOME/models}"
+BIN_DIR="$HOME/.local/bin"
+log "Memory profile: ${PROFILE}"
+if (( MEM_GB < 32 )) && [[ "$MODEL_FILE" == Qwen3.6-35B-A3B-* ]]; then
   echo "Warning: ${MODEL_FILE} needs ~23 GB plus context. ${MEM_GB} GB is tight."
 fi
 
@@ -112,6 +131,7 @@ Next steps:
   1. In one terminal:   llama-coder
   2. In another:        cd <your-project> && qwen-local
 
+Profile: ${MEM_GB} GB detected (${PROFILE})
 Model:   ${MODEL_PATH}
 Server:  http://127.0.0.1:${PORT}   (context ${CTX} tokens)
 Change context per run:   CTX=65536 llama-coder
