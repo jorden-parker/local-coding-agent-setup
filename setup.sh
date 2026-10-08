@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Local coding agent setup for Apple Silicon Macs (tested target: MacBook Pro M4 Pro, 48 GB).
-# Installs llama.cpp + Claude Code, downloads Qwen3.6-35B-A3B (fast MoE), and creates
+# Installs llama.cpp + Qwen Code, downloads Qwen3.6-35B-A3B (fast MoE), and creates
 # two launchers:
 #   llama-coder   -> starts the local model server on http://localhost:8080
-#   claude-local  -> runs Claude Code against that server
+#   qwen-local    -> runs Qwen Code against that server
 #
 # Re-runnable. Override defaults with env vars, e.g.:
 #   CTX=65536 ./setup.sh
@@ -41,10 +41,10 @@ log "Installing llama.cpp and hf (HuggingFace CLI)"
 brew install llama.cpp hf
 brew upgrade llama.cpp hf 2>/dev/null || true   # Qwen3.x needs a recent build
 
-# --- 3. Claude Code ----------------------------------------------------------
-if ! command -v claude >/dev/null 2>&1; then
-  log "Installing Claude Code"
-  brew install --cask claude-code
+# --- 3. Qwen Code ------------------------------------------------------------
+if ! command -v qwen >/dev/null 2>&1; then
+  log "Installing Qwen Code"
+  brew install qwen-code
 fi
 
 # --- 4. Model download -------------------------------------------------------
@@ -77,25 +77,23 @@ exec llama-server \\
 LAUNCHER
 chmod +x "$BIN_DIR/llama-coder"
 
-log "Writing ${BIN_DIR}/claude-local"
-cat > "$BIN_DIR/claude-local" <<LAUNCHER
+log "Writing ${BIN_DIR}/qwen-local"
+cat > "$BIN_DIR/qwen-local" <<LAUNCHER
 #!/usr/bin/env bash
-# Runs Claude Code against the local llama-server.
-# CLAUDE_CODE_ATTRIBUTION_HEADER=0 keeps the system prompt stable so the
-# server's KV cache is reused between turns (otherwise ~90% slower).
+# Runs Qwen Code against the local llama-server (OpenAI-compatible /v1 API).
+# OPENAI_API_KEY must be set (any value) or Qwen Code will not select the
+# OpenAI-compatible auth type (Qwen Code docs: users/configuration/auth.md).
 PORT="\${PORT:-${PORT}}"
 if ! curl -sf "http://127.0.0.1:\${PORT}/health" >/dev/null 2>&1; then
   echo "llama-server is not running on port \${PORT}. Start it with: llama-coder" >&2
   exit 1
 fi
-export ANTHROPIC_BASE_URL="http://127.0.0.1:\${PORT}"
-export ANTHROPIC_AUTH_TOKEN="local"
-export ANTHROPIC_API_KEY=""
-export CLAUDE_CODE_ATTRIBUTION_HEADER=0
-export CLAUDE_CODE_ENABLE_TELEMETRY=0
-exec claude --model "${ALIAS}" "\$@"
+export OPENAI_BASE_URL="http://127.0.0.1:\${PORT}/v1"
+export OPENAI_API_KEY="local"
+export OPENAI_MODEL="${ALIAS}"
+exec qwen "\$@"
 LAUNCHER
-chmod +x "$BIN_DIR/claude-local"
+chmod +x "$BIN_DIR/qwen-local"
 
 # --- 6. PATH hint ------------------------------------------------------------
 case ":$PATH:" in
@@ -112,7 +110,7 @@ cat <<MSG
 
 Next steps:
   1. In one terminal:   llama-coder
-  2. In another:        cd <your-project> && claude-local
+  2. In another:        cd <your-project> && qwen-local
 
 Model:   ${MODEL_PATH}
 Server:  http://127.0.0.1:${PORT}   (context ${CTX} tokens)
