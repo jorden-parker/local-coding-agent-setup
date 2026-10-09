@@ -502,3 +502,61 @@ func TestQwenLauncherAdoptsOnlyOrphanedLlamaServers(t *testing.T) {
 		t.Fatal("claim left behind")
 	}
 }
+
+// Qwen Code reads the IDE companion's <port>.lock from $QWEN_HOME/ide, but the
+// VS Code extension writes it under the global Qwen dir, so every instance
+// directory's ide/ must point there.
+func TestQwenLauncherSharesIdeLockDir(t *testing.T) {
+	launcher, _ := qwenLauncherFixture(t)
+	// An inherited QWEN_HOME wins: an editor started from that shell writes its lock file there.
+	if _, out, err := runLauncher(t, launcher); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	link := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen-9000", "ide")
+	want := filepath.Join(os.Getenv("QWEN_HOME"), "ide")
+	if got, err := os.Readlink(link); err != nil || got != want {
+		t.Fatalf("ide link: %q %v, want %q", got, err, want)
+	}
+	if info, err := os.Stat(want); err != nil || !info.IsDir() {
+		t.Fatalf("lock dir %s: %v", want, err)
+	}
+
+	// Without QWEN_HOME the extension uses ~/.qwen/ide; a stale link is replaced.
+	os.Unsetenv("QWEN_HOME")
+	t.Setenv("PORT", "8080")
+	defaultLink := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen", "ide")
+	if err := os.MkdirAll(filepath.Dir(defaultLink), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(t.TempDir(), "stale"), defaultLink); err != nil {
+		t.Fatal(err)
+	}
+	if _, out, err := runLauncher(t, launcher); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	want = filepath.Join(os.Getenv("HOME"), ".qwen", "ide")
+	if got, err := os.Readlink(defaultLink); err != nil || got != want {
+		t.Fatalf("default ide link: %q %v, want %q", got, err, want)
+	}
+	if info, err := os.Stat(want); err != nil || !info.IsDir() {
+		t.Fatalf("lock dir %s: %v", want, err)
+	}
+
+	// A real directory in the way is left alone with a warning.
+	if err := os.Remove(defaultLink); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(defaultLink, 0755); err != nil {
+		t.Fatal(err)
+	}
+	_, out, err := runLauncher(t, launcher)
+	if err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if !strings.Contains(string(out), defaultLink+" exists and is not a symlink") {
+		t.Fatalf("warning missing: %s", out)
+	}
+	if info, err := os.Lstat(defaultLink); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("directory replaced: %v %v", info, err)
+	}
+}

@@ -164,7 +164,13 @@ preserving unrelated settings, and adds `~/.qwen/skills` to `skills.directories`
 linked there from `~/.agents/skills`; existing entries in that list are kept, and the lean
 profile for ordinary `qwen` never touches it. `qwen-local` sets `QWEN_HOME` to this dedicated directory and
 passes explicit model, auth, base URL, and API key flags, so saved choices from ordinary `qwen`
-cannot select another model. Model/auth/endpoint flags passed to `qwen-local` are rejected;
+cannot select another model. Each such directory's `ide/` is a symlink to `~/.qwen/ide` (or to `ide/` under a
+`QWEN_HOME` already set in your shell), where the VS Code companion extension writes the
+`<port>.lock` holding its port and auth token; Qwen Code only looks for it under `QWEN_HOME`, and
+without it reports "Error POSTing to endpoint: Unauthorized" when you run `/ide enable`. The link
+is re-pointed on every launch; if `ide/` is already a real directory or file the launcher leaves it
+and warns that the companion will not find its lock file. Ordinary `qwen` is untouched: only
+`~/.qwen/ide` itself is created, and the links live inside the instance directories. Model/auth/endpoint flags passed to `qwen-local` are rejected;
 change `ALIAS` or `PORT` through `lca config set`. `lca doctor` reports provider or lean-setting
 drift for the configured port. If an older config has cache/checkpoint flags in `EXTRA_ARGS`,
 move their values into `CACHE_RAM` / `CTX_CHECKPOINTS` and remove those flags from `EXTRA_ARGS`.
@@ -198,6 +204,20 @@ port uses, so `lca sync` never races or overwrites the default instance's provid
 `llama-server` loads a full copy of the model and serves a single request slot (`-np 1`), so RAM
 bounds how many sessions you can run. `lca doctor` only covers the port configured in config.env;
 `lca stats` reads the usage logs of every instance.
+
+### VS Code IDE companion
+
+Qwen Code's IDE integration (open files, cursor and selection as context, edits shown in VS Code's
+diff viewer) works under `qwen-local` too. Install the "Qwen Code Companion" extension
+(`qwenlm.qwen-code-vscode-ide-companion`) from the Extensions view in VS Code; `/ide install`
+inside a session also works, but it uses whichever `code` command is first on `PATH`, which may
+belong to Cursor rather than VS Code. Then open a fresh integrated terminal so it inherits the
+extension's `QWEN_CODE_IDE_SERVER_PORT` and `QWEN_CODE_IDE_WORKSPACE_PATH`, run `qwen-local`
+there and type `/ide enable` (`/ide disable` turns it off). Start sessions from the terminal, not
+from the extension's "Qwen Code: Run" command, which launches plain `qwen` against your default
+provider. The extension writes its lock file to `~/.qwen/ide`, or to `$QWEN_HOME/ide` when `QWEN_HOME`
+was set in the shell that launched the editor; `qwen-local` links each instance directory's `ide/`
+to the same place so Qwen Code finds it (see above).
 
 ## Response times
 

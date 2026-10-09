@@ -18,7 +18,9 @@
 # adopted one a crashed session left behind), launcher.log (that server's
 # console output) and sharers/<pid>. A port other than config.env's own moves
 # QWEN_HOME to a qwen-<port> sibling directory so sessions never race on Qwen
-# settings.
+# settings. Every such directory's ide/ is a symlink to ~/.qwen/ide (or the
+# ide/ under a QWEN_HOME inherited from the environment), where the VS Code
+# companion extension writes the <port>.lock Qwen Code needs to connect.
 set -eo pipefail
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder/config.env"
@@ -28,6 +30,7 @@ INSTANCES="$STATE/instances"
 
 env_port="${PORT:-}"
 env_ctx="${CTX:-}"
+env_qwen_home="${QWEN_HOME:-}"
 # shellcheck source=/dev/null
 source "$CONFIG"
 cfg_port="${PORT:-}"
@@ -217,6 +220,23 @@ fi
 qwen_home_dir="$(dirname -- "$CONFIG")/qwen"
 [[ "$port" != "$cfg_port" ]] && qwen_home_dir="$(dirname -- "$CONFIG")/qwen-${port}"
 export QWEN_HOME="$qwen_home_dir"
+# Qwen Code looks for the IDE companion's lock file in $QWEN_HOME/ide/<port>.lock
+# (Storage.getGlobalIdeDir), but the VS Code extension runs outside this shell
+# and writes it to ~/.qwen/ide. Without the lock file the CLI connects with the
+# port from QWEN_CODE_IDE_SERVER_PORT and no bearer token, and the extension
+# answers 401 Unauthorized. Share the directory instead. An inherited QWEN_HOME
+# is honoured because an editor launched from that shell writes under it too.
+ide_dir="${env_qwen_home:-$HOME/.qwen}/ide"
+ide_link="$qwen_home_dir/ide"
+mkdir -p "$ide_dir" "$qwen_home_dir"
+if [[ -L "$ide_link" ]]; then
+  rm -f "$ide_link"
+  ln -s "$ide_dir" "$ide_link"
+elif [[ -e "$ide_link" ]]; then
+  echo "qwen-local: $ide_link exists and is not a symlink; the IDE companion will not find its lock file in $ide_dir" >&2
+else
+  ln -s "$ide_dir" "$ide_link"
+fi
 unset QWEN_CODE_ENABLE_WORKFLOWS QWEN_CODE_DISABLE_WORKFLOWS QWEN_RUNTIME_DIR
 # A one-off CTX= must reach Qwen's contextWindowSize too, not only the server.
 sync_args=(sync --port "$port")
