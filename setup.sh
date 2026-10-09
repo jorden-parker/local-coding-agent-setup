@@ -3,7 +3,7 @@
 # Tested targets: MacBook Pro M4 Pro 48 GB and MacBook Air M1 16 GB.
 # Installs llama.cpp + Qwen Code + Go (builds lca), downloads a Qwen GGUF model, seeds
 # ~/.config/llama-coder/config.env, and installs three binaries to ~/.local/bin:
-#   llama-coder   -> starts the local model server on http://localhost:8080
+#   llama-coder   -> starts the local model server on http://127.0.0.1:8080
 #   qwen-local    -> runs Qwen Code against that server
 #   lca           -> edits config.env, syncs Qwen Code's provider entry, shows response times
 #
@@ -55,7 +55,7 @@ CONFIG="$CONFIG_DIR/config.env"
 QWEN_SETTINGS="$CONFIG_DIR/qwen/settings.json"
 log "Memory profile: ${PROFILE}"
 if (( MEM_GB < 32 )) && [[ "$MODEL_FILE" == Qwen3.6-35B-A3B-* ]]; then
-  echo "Warning: ${MODEL_FILE} needs ~23 GB plus context. ${MEM_GB} GB is tight."
+  echo "Warning: ${MODEL_FILE} needs ~22.4 GB plus context. ${MEM_GB} GB is tight."
 fi
 
 # --- 1. Homebrew -----------------------------------------------------------

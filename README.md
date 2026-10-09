@@ -23,6 +23,7 @@ running. `lca` (no arguments) opens a small terminal UI for settings and respons
 
 | Item | Source |
 |---|---|
+| Homebrew | official install script (skipped if already installed) |
 | llama.cpp | Homebrew formula `llama.cpp` |
 | hf (HuggingFace CLI) | Homebrew formula `hf` |
 | Qwen Code | Homebrew formula `qwen-code` (skipped if already installed) |
@@ -70,7 +71,9 @@ so there is no comparable agent benchmark for this profile.
 Options on this profile:
 
 - Better quality, slower: swap to `Qwen3.5-9B-UD-Q6_K_XL.gguf` (8.8 GB) with
-  `MODEL_FILE=Qwen3.5-9B-UD-Q6_K_XL.gguf ./setup.sh`.
+  `MODEL_FILE=Qwen3.5-9B-UD-Q6_K_XL.gguf ./setup.sh`. On an existing install that only downloads
+  the file, because config.env is kept; then point at it with
+  `lca config set MODEL_PATH ~/models/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q6_K_XL.gguf`.
 - Try the full context: `CTX=131072 llama-coder`. Expect memory pressure.
 
 ## Why Qwen Code
@@ -106,7 +109,10 @@ ALIAS=qwen3.8-27b ./setup.sh
 ```
 
 Qwen3.8-27B is dense and scores higher (SWE-bench Pro 61.7 vs 49.5) but generates
-several times slower on Apple Silicon. It does not fit a 16 GB machine.
+several times slower on Apple Silicon. It does not fit a 16 GB machine. On an existing install
+setup.sh only downloads the model, because config.env is kept; then switch to it with
+`lca config set MODEL_PATH ~/models/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL.gguf` and
+`lca config set ALIAS qwen3.8-27b`.
 
 ## Configure without re-running setup.sh
 
@@ -118,7 +124,7 @@ every time they start. setup.sh seeds it once from the memory profile and never 
 lca config show                      # every key and its value
 lca config set CTX 65536             # validated; ALIAS, PORT and CTX also prepare the local Qwen settings
 lca config set EXTRA_ARGS --jinja    # extra llama-server flags
-lca config edit                      # $EDITOR, then validate + sync
+lca config edit                      # $VISUAL or $EDITOR (else vi), then validate + sync
 lca                                  # the same as a form in the terminal UI (tab 2)
 CTX=32768 llama-coder                # one-off override; PORT works the same way for both launchers
 ```
@@ -128,23 +134,24 @@ CTX=32768 llama-coder                # one-off override; PORT works the same way
 | `MODEL_PATH` | `-m` | from the memory profile | absolute path to an existing `.gguf` |
 | `ALIAS` | `--alias` | `qwen3.5-9b` / `qwen3.6-35b-a3b` | also the Qwen Code provider id and `OPENAI_MODEL` |
 | `CTX` | `-c` | `65536` / `131072` | 2048 to 1048576, multiple of 256; mirrored to Qwen's `contextWindowSize` |
-| `PORT` | `--port` | `8080` | first port `qwen-local` tries; `PORT=` in the environment pins it for both launchers |
-| `TEMP` | `--temp` | `0.7` | Unsloth non-thinking recommendation for Qwen3.5/3.6 |
-| `TOP_P` | `--top-p` | `0.8` | |
-| `TOP_K` | `--top-k` | `20` | |
-| `MIN_P` | `--min-p` | `0.0` | |
-| `PRESENCE_PENALTY` | `--presence-penalty` | `1.5` | |
+| `PORT` | `--port` | `8080` | 1024 to 65535; first port `qwen-local` tries, `PORT=` in the environment pins it for both launchers |
+| `TEMP` | `--temp` | `0.7` | 0 to 2; Unsloth non-thinking recommendation for Qwen3.5/3.6 |
+| `TOP_P` | `--top-p` | `0.8` | 0 to 1 |
+| `TOP_K` | `--top-k` | `20` | 0 to 1000, 0 disables |
+| `MIN_P` | `--min-p` | `0.0` | 0 to 1 |
+| `PRESENCE_PENALTY` | `--presence-penalty` | `1.5` | -2 to 2; Unsloth recommends 1.5 for Qwen3.x non-thinking |
 | `THINKING` | `--chat-template-kwargs` | `false` | `true` enables reasoning; slower agent turns |
 | `CACHE_RAM` | `--cache-ram` | `8192` | host prompt-cache limit in MiB, 0 disables it; range 0–1048576 |
 | `CTX_CHECKPOINTS` | `--ctx-checkpoints` | `32` | recurrent/window state checkpoints per slot; range 0–1024 |
-| `EXTRA_ARGS` | appended | empty | whitespace-separated, no quoting; flags the keys above own are rejected |
+| `EXTRA_ARGS` | appended | empty | whitespace-separated, no quoting; `lca` rejects flags the keys above own and the launcher's fixed `-fa`, `-ngl`, `-np`, `--host`, `--log-file`, `--log-timestamps`, `--metrics` |
 
 Restart rules: every key needs a restart of `llama-coder`. `ALIAS`, `PORT` and `CTX` also need a
 restart of `qwen-local`, because Qwen Code reads `modelProviders` at startup. `lca config set`
 prints the hint. setup.sh, `lca sync`, and every `qwen-local` launch on config.env's own port
 prepare `${XDG_CONFIG_HOME:-~/.config}/llama-coder/qwen/settings.json`; a launch on any other port
 prepares `qwen-<port>/settings.json` next to it and points `QWEN_HOME` there. The file's
-provider entry is under `modelProviders.openai[]` with `id` = `ALIAS`, `baseUrl` =
+provider entry is under `modelProviders.openai[]` with `id` = `ALIAS`, `name` =
+`<ALIAS> (local llama.cpp)`, `baseUrl` =
 `http://127.0.0.1:PORT/v1`, `envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize`
 = `CTX`. Preparation also selects the local model, OpenAI authentication, and lean defaults,
 preserving unrelated settings. `qwen-local` sets `QWEN_HOME` to this dedicated directory and
@@ -153,8 +160,9 @@ cannot select another model. Model/auth/endpoint flags passed to `qwen-local` ar
 change `ALIAS` or `PORT` through `lca config set`. `lca doctor` reports provider or lean-setting
 drift for the configured port. If an older config has cache/checkpoint flags in `EXTRA_ARGS`,
 move their values into `CACHE_RAM` / `CTX_CHECKPOINTS` and remove those flags from `EXTRA_ARGS`.
-The launcher rejects duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints`, and
-`--flag=value` forms.
+`lca config set` rejects every owned or fixed flag; the launcher itself only checks the
+cache/checkpoint duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints`, and `--flag=value`
+forms, for configs edited by hand.
 
 ### Running more than one instance
 
@@ -187,7 +195,8 @@ bounds how many sessions you can run. `lca doctor` only covers the port configur
 
 Two sources are captured, and `lca stats` shows both as one table per source (p50, p95, mean,
 token counts per day and model) plus a sparkline of the daily p50. `lca stats --raw` lists every
-request, `--json` is for scripts, `--source qwen|server`, `--days N` and `--model ALIAS` filter.
+request, `--json` is for scripts, `--source qwen|server|both` (default `both`), `--days N` and
+`--model ALIAS` filter.
 The terminal UI (`lca`, tab 1) shows the same table and, while the server runs, a live line from
 its `/metrics` endpoint every two seconds (`lca metrics` prints one scrape).
 
@@ -323,6 +332,13 @@ stops a session at that limit. Do not run two model servers concurrently on the 
 
 The server flags live in `launchers/llama-coder`, installed verbatim to `~/.local/bin/llama-coder`.
 
+- `-ngl 99` offloads every layer to the GPU (unified memory on Apple Silicon, so there is no
+  reason to keep layers on the CPU) and `-fa on` enables flash attention, which llama.cpp supports
+  on Metal.
+- `-np 1`: one request slot, so the whole context budget and KV cache serve the single Qwen Code
+  session; `qwen-local` starts a separate server per session instead of sharing slots.
+- `--host 127.0.0.1`: loopback only, so the unauthenticated server is never reachable from the
+  network.
 - No `--cache-type-k/v` (quantised KV cache). Not optimised for Metal per the llama.cpp
   maintainer in [issue #23011](https://github.com/ggml-org/llama.cpp/issues/23011).
 - No MTP speculative decoding. Reported slower than baseline on an M4 Pro 48 GB in the same issue.
@@ -338,4 +354,6 @@ The server flags live in `launchers/llama-coder`, installed verbatim to `~/.loca
 - Tool calls failing? `lca config set EXTRA_ARGS --jinja`. Recent llama.cpp builds enable it by
   default; harness-bench passed it explicitly.
 - Previously used `claude-local`? setup.sh no longer writes it; delete `~/.local/bin/claude-local` by hand.
-- Measure speed: `llama-bench -m ~/models/<repo>/<file>.gguf -ngl 99 -p 512 -n 128` (setup.sh prints the exact path at the end)
+- Measure speed: `llama-bench -m ~/models/<repo-name>/<file>.gguf -ngl 99 -p 512 -n 128`, where
+  `<repo-name>` is the Hugging Face repo without its owner, e.g. `Qwen3.6-35B-A3B-GGUF`
+  (setup.sh prints the exact path at the end)
