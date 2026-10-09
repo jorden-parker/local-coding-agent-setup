@@ -4,6 +4,9 @@
 # ${XDG_CONFIG_HOME:-~/.config}/llama-coder/config.env; PORT= in the
 # environment overrides the file. Must match the PORT llama-coder used.
 # Uses a dedicated QWEN_HOME and explicitly selects the configured local model.
+# A PORT= override that differs from config.env's own PORT runs as a second,
+# isolated instance: QWEN_HOME moves to a qwen-<port> sibling directory so it
+# never races the default instance's Qwen settings.
 set -eo pipefail
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder/config.env"
@@ -12,6 +15,7 @@ CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder/config.env"
 env_port="${PORT:-}"
 # shellcheck source=/dev/null
 source "$CONFIG"
+cfg_port="${PORT:-}"
 [[ -n "$env_port" ]] && PORT="$env_port"
 [[ -n "${ALIAS:-}" && -n "${PORT:-}" ]] || { echo "ALIAS and PORT must be set in $CONFIG" >&2; exit 1; }
 
@@ -31,7 +35,9 @@ if ! curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
   echo "llama-server is not running on port ${PORT}. Start it with: llama-coder" >&2
   exit 1
 fi
-export QWEN_HOME="$(dirname -- "$CONFIG")/qwen"
+qwen_home_dir="$(dirname -- "$CONFIG")/qwen"
+[[ "$PORT" != "$cfg_port" ]] && qwen_home_dir="$(dirname -- "$CONFIG")/qwen-${PORT}"
+export QWEN_HOME="$qwen_home_dir"
 unset QWEN_CODE_ENABLE_WORKFLOWS QWEN_CODE_DISABLE_WORKFLOWS QWEN_RUNTIME_DIR
 lca sync --port "$PORT" >/dev/null
 export OPENAI_BASE_URL="http://127.0.0.1:${PORT}/v1"

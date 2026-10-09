@@ -147,7 +147,8 @@ func TestQwenLauncherPinsSelectionAndForwardsArguments(t *testing.T) {
 		t.Fatalf("args: %q", args)
 	}
 	env, _ := os.ReadFile(capture + ".env")
-	want = filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen") + "\nlocal\nhttp://127.0.0.1:9000/v1\nlocal\nunset\nunset\nunset\n"
+	// config.env's own PORT is 8080; the 9000 override isolates QWEN_HOME.
+	want = filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen-9000") + "\nlocal\nhttp://127.0.0.1:9000/v1\nlocal\nunset\nunset\nunset\n"
 	if string(env) != want {
 		t.Fatalf("env: %q", env)
 	}
@@ -158,6 +159,19 @@ func TestQwenLauncherPinsSelectionAndForwardsArguments(t *testing.T) {
 	health, _ := os.ReadFile(capture + ".health")
 	if !strings.Contains(string(health), "http://127.0.0.1:9000/health") {
 		t.Fatal("health uses wrong port")
+	}
+}
+
+func TestQwenLauncherSharesDefaultDirWhenPortMatchesConfig(t *testing.T) {
+	launcher, capture := qwenLauncherFixture(t)
+	t.Setenv("PORT", "8080") // matches config.env's own PORT: no isolation needed.
+	if out, err := exec.Command("/bin/bash", launcher).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	env, _ := os.ReadFile(capture + ".env")
+	want := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen") + "\nlocal\nhttp://127.0.0.1:8080/v1\nlocal\nunset\nunset\nunset\n"
+	if string(env) != want {
+		t.Fatalf("env: %q", env)
 	}
 }
 

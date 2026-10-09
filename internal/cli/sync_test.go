@@ -29,20 +29,31 @@ func TestSyncIsolatesLocalAndPortOverride(t *testing.T) {
 	if err := os.WriteFile(paths.LegacyQwenSettings(), ordinary, 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct {
-		args []string
-		port int
-	}{{[]string{"sync", "--port", "9000"}, 9000}, {[]string{"sync"}, 8080}} {
-		root := Root()
-		root.SetArgs(tc.args)
-		if err := root.Execute(); err != nil {
-			t.Fatal(err)
-		}
-		if err := qwen.CheckLocal(paths.QwenSettings(), qwen.ProviderFor("local", tc.port, 65536)); err != nil {
-			t.Fatal(err)
-		}
-	}
 	root := Root()
+	root.SetArgs([]string{"sync", "--port", "9000"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	// A port that differs from config.env's own PORT is isolated: it must not
+	// touch the shared default settings file.
+	if err := qwen.CheckLocal(paths.QwenSettingsFor("9000", "8080"), qwen.ProviderFor("local", 9000, 65536)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(paths.QwenSettings()); !os.IsNotExist(err) {
+		t.Fatal("port override wrote the shared default settings file")
+	}
+
+	root = Root()
+	root.SetArgs([]string{"sync"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	// The configured port still uses the original, shared settings file.
+	if err := qwen.CheckLocal(paths.QwenSettings(), qwen.ProviderFor("local", 8080, 65536)); err != nil {
+		t.Fatal(err)
+	}
+
+	root = Root()
 	root.SetArgs([]string{"sync", "--port", "bad"})
 	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "PORT") {
 		t.Fatalf("invalid port: %v", err)

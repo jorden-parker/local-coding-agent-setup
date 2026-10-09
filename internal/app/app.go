@@ -58,6 +58,21 @@ func SyncQwen(f *config.File) (qwen.Provider, bool, error) {
 	return p, changed, err
 }
 
+// SyncQwenAt prepares the local provider and lean settings for f, isolated
+// per paths.QwenInstanceDir(port, cfgPort). cfgPort is config.env's own PORT,
+// captured before any runtime override; port is the port actually in effect.
+// A port matching cfgPort still uses the shared default settings file, so
+// ordinary single-instance use is unaffected.
+func SyncQwenAt(f *config.File, port, cfgPort string) (qwen.Provider, bool, string, error) {
+	p, err := Provider(f)
+	if err != nil {
+		return p, false, "", err
+	}
+	settingsPath := paths.QwenSettingsFor(port, cfgPort)
+	changed, err := qwen.PrepareLocal(settingsPath, p)
+	return p, changed, settingsPath, err
+}
+
 // Set validates and writes one key, syncing Qwen when the key requires it.
 // It returns the warning (if any) and a restart hint.
 func Set(f *config.File, key, value string) (warn, hint string, err error) {

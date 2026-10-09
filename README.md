@@ -124,7 +124,7 @@ CTX=32768 llama-coder                # one-off override; PORT works the same way
 | `MODEL_PATH` | `-m` | from the memory profile | absolute path to an existing `.gguf` |
 | `ALIAS` | `--alias` | `qwen3.5-9b` / `qwen3.6-35b-a3b` | also the Qwen Code provider id and `OPENAI_MODEL` |
 | `CTX` | `-c` | `65536` / `131072` | 2048 to 1048576, multiple of 256; mirrored to Qwen's `contextWindowSize` |
-| `PORT` | `--port` | `8080` | both launchers must use the same port |
+| `PORT` | `--port` | `8080` | both launchers in one instance must use the same port |
 | `TEMP` | `--temp` | `0.7` | Unsloth non-thinking recommendation for Qwen3.5/3.6 |
 | `TOP_P` | `--top-p` | `0.8` | |
 | `TOP_K` | `--top-k` | `20` | |
@@ -138,18 +138,30 @@ CTX=32768 llama-coder                # one-off override; PORT works the same way
 Restart rules: every key needs a restart of `llama-coder`. `ALIAS`, `PORT` and `CTX` also need a
 restart of `qwen-local`, because Qwen Code reads `modelProviders` at startup. `lca config set`
 prints the hint. setup.sh, `lca sync`, and every `qwen-local` launch prepare
-`${XDG_CONFIG_HOME:-~/.config}/llama-coder/qwen/settings.json`. Its provider entry is under
-`modelProviders.openai[]` with `id` = `ALIAS`, `baseUrl` = `http://127.0.0.1:PORT/v1`,
-`envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize` = `CTX`. Preparation also
-selects the local model, OpenAI authentication, and lean defaults, preserving unrelated settings.
-`qwen-local` sets `QWEN_HOME` to this dedicated directory and passes explicit model, auth,
-base URL, and API key flags, so saved choices from ordinary `qwen` cannot select another model.
-Model/auth/endpoint flags passed to `qwen-local` are rejected; change `ALIAS` or `PORT` through
-`lca config set`. A one-off `PORT=9000 qwen-local` prepares the matching endpoint without
-saving the override to config.env. `lca doctor` reports provider or lean-setting drift.
-If an older config has cache/checkpoint flags in `EXTRA_ARGS`, move their values into
-`CACHE_RAM` / `CTX_CHECKPOINTS` and remove those flags from `EXTRA_ARGS`. The launcher rejects
-duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints`, and `--flag=value` forms.
+`${XDG_CONFIG_HOME:-~/.config}/llama-coder/qwen/settings.json` for the port in config.env. Its
+provider entry is under `modelProviders.openai[]` with `id` = `ALIAS`, `baseUrl` =
+`http://127.0.0.1:PORT/v1`, `envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize`
+= `CTX`. Preparation also selects the local model, OpenAI authentication, and lean defaults,
+preserving unrelated settings. `qwen-local` sets `QWEN_HOME` to this dedicated directory and
+passes explicit model, auth, base URL, and API key flags, so saved choices from ordinary `qwen`
+cannot select another model. Model/auth/endpoint flags passed to `qwen-local` are rejected;
+change `ALIAS` or `PORT` through `lca config set`. `lca doctor` reports provider or lean-setting
+drift for the configured port. If an older config has cache/checkpoint flags in `EXTRA_ARGS`,
+move their values into `CACHE_RAM` / `CTX_CHECKPOINTS` and remove those flags from `EXTRA_ARGS`.
+The launcher rejects duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints`, and
+`--flag=value` forms.
+
+### Running more than one instance
+
+A one-off `PORT=9000 llama-coder` plus `PORT=9000 qwen-local` prepares the matching endpoint
+without saving the override to config.env, and runs as a second, independent instance: because
+`9000` differs from config.env's own `PORT`, its Qwen settings land in
+`.../llama-coder/qwen-9000/settings.json` rather than the shared `qwen/settings.json` the
+default port uses, so `lca sync` never races or overwrites the default instance's provider
+entry. Start as many `llama-coder`/`qwen-local` pairs as you have RAM for, each on its own
+`PORT` — every `llama-server` loads a full copy of the model, and each shares that server's
+single request slot (`-np 1`) across whatever clients point at its port. `lca doctor` and
+`lca stats` only cover the port configured in config.env.
 
 ## Response times
 

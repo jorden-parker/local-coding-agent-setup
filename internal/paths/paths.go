@@ -41,8 +41,25 @@ func Timings() string { return filepath.Join(StateDir(), "timings.jsonl") }
 // QwenDir holds the managed qwen-local configuration, independent of QWEN_HOME.
 func QwenDir() string { return filepath.Join(ConfigDir(), "qwen") }
 
+// QwenInstanceDir is QwenDir() when port matches cfgPort (config.env's own
+// PORT), or an isolated "qwen-<port>" sibling otherwise. A second
+// llama-coder/qwen-local pair started on a different port then never shares
+// mutable Qwen state, and races on the same settings file, with the default
+// instance.
+func QwenInstanceDir(port, cfgPort string) string {
+	if port == "" || port == cfgPort {
+		return QwenDir()
+	}
+	return filepath.Join(ConfigDir(), "qwen-"+port)
+}
+
 // QwenSettings is the managed qwen-local settings file.
 func QwenSettings() string { return filepath.Join(QwenDir(), "settings.json") }
+
+// QwenSettingsFor is the managed settings file for QwenInstanceDir(port, cfgPort).
+func QwenSettingsFor(port, cfgPort string) string {
+	return filepath.Join(QwenInstanceDir(port, cfgPort), "settings.json")
+}
 
 // QwenUsageDir holds Qwen Code's token-usage-YYYY-MM.jsonl files.
 func QwenUsageDir() string { return filepath.Join(QwenDir(), "usage") }

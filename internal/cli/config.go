@@ -155,10 +155,13 @@ func syncCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			cfgPort, _ := f.Get("PORT")
+			activePort := cfgPort
 			if cmd.Flags().Changed("port") {
 				f.Set("PORT", port) // Runtime override only; config.env is not saved.
+				activePort = port
 			}
-			p, changed, err := app.SyncQwen(f)
+			p, changed, settingsPath, err := app.SyncQwenAt(f, activePort, cfgPort)
 			if err != nil {
 				return err
 			}
@@ -166,7 +169,7 @@ func syncCmd() *cobra.Command {
 			if changed {
 				state = "updated"
 			}
-			fmt.Printf("%s: provider %q → %s, contextWindowSize %d (%s)\n", paths.Tildify(paths.QwenSettings()), p.ID, p.BaseURL, p.ContextWindow, state)
+			fmt.Printf("%s: provider %q → %s, contextWindowSize %d (%s)\n", paths.Tildify(settingsPath), p.ID, p.BaseURL, p.ContextWindow, state)
 			return nil
 		},
 	}
