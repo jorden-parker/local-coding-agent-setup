@@ -105,3 +105,23 @@ func TestReadUsage(t *testing.T) {
 		t.Errorf("since filter: %d", len(later))
 	}
 }
+
+func TestReadUsageDirsRetainsHistoryAndDeduplicates(t *testing.T) {
+	managed, legacy := t.TempDir(), t.TempDir()
+	for _, dir := range []string{managed, legacy} {
+		if err := os.WriteFile(filepath.Join(dir, "token-usage-2026-10.jsonl"), []byte(usageSample), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	extra := `{"schemaVersion":1,"id":"legacy-only","timestamp":"2026-10-08T13:05:00Z","model":"old"}` + "\n"
+	if err := os.WriteFile(filepath.Join(legacy, "token-usage-extra.jsonl"), []byte(extra), 0600); err != nil {
+		t.Fatal(err)
+	}
+	records, skipped, err := ReadUsageDirs(time.Time{}, managed, legacy, filepath.Join(t.TempDir(), "missing"))
+	if err != nil || len(records) != 3 || skipped != 4 {
+		t.Fatalf("records=%d skipped=%d err=%v", len(records), skipped, err)
+	}
+	if records[0].ID != "legacy-only" {
+		t.Fatal("history lost or ordering incorrect")
+	}
+}

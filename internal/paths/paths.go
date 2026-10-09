@@ -38,14 +38,21 @@ func StateDir() string {
 // Timings is the compacted per-request timing file.
 func Timings() string { return filepath.Join(StateDir(), "timings.jsonl") }
 
-// QwenDir is ~/.qwen.
-func QwenDir() string { return filepath.Join(home(), ".qwen") }
+// QwenDir holds the managed qwen-local configuration, independent of QWEN_HOME.
+func QwenDir() string { return filepath.Join(ConfigDir(), "qwen") }
 
-// QwenSettings is ~/.qwen/settings.json.
+// QwenSettings is the managed qwen-local settings file.
 func QwenSettings() string { return filepath.Join(QwenDir(), "settings.json") }
 
 // QwenUsageDir holds Qwen Code's token-usage-YYYY-MM.jsonl files.
 func QwenUsageDir() string { return filepath.Join(QwenDir(), "usage") }
+
+// LegacyQwenDir holds ordinary Qwen settings and historical usage.
+func LegacyQwenDir() string { return filepath.Join(home(), ".qwen") }
+
+func LegacyQwenSettings() string { return filepath.Join(LegacyQwenDir(), "settings.json") }
+
+func LegacyQwenUsageDir() string { return filepath.Join(LegacyQwenDir(), "usage") }
 
 // BinDir is ~/.local/bin, where setup.sh installs the launchers and lca.
 func BinDir() string { return filepath.Join(home(), ".local", "bin") }

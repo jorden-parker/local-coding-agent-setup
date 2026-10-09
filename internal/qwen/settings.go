@@ -76,29 +76,8 @@ func Sync(path string, p Provider) (bool, error) {
 		return false, err
 	}
 	before, _ := json.Marshal(m)
-	list := openaiList(m, true)
-	var entry map[string]any
-	for _, e := range list {
-		if em, ok := e.(map[string]any); ok && em["id"] == p.ID {
-			entry = em
-			break
-		}
-	}
-	if entry == nil {
-		entry = map[string]any{}
-		list = append(list, entry)
-		m["modelProviders"].(map[string]any)["openai"] = list
-	}
-	entry["id"] = p.ID
-	entry["name"] = p.Name
-	entry["baseUrl"] = p.BaseURL
-	entry["envKey"] = p.EnvKey
-	gc, _ := entry["generationConfig"].(map[string]any)
-	if gc == nil {
-		gc = map[string]any{}
-		entry["generationConfig"] = gc
-	}
-	gc["contextWindowSize"] = float64(p.ContextWindow)
+	mergeProvider(m, p)
+
 	after, _ := json.Marshal(m)
 	if string(before) == string(after) {
 		return false, nil
@@ -147,4 +126,31 @@ func UsageStatsEnabled(path string) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// mergeProvider updates only the provider fields owned by lca.
+func mergeProvider(m map[string]any, p Provider) {
+	list := openaiList(m, true)
+	var entry map[string]any
+	for _, e := range list {
+		if em, ok := e.(map[string]any); ok && em["id"] == p.ID {
+			entry = em
+			break
+		}
+	}
+	if entry == nil {
+		entry = map[string]any{}
+		list = append(list, entry)
+		m["modelProviders"].(map[string]any)["openai"] = list
+	}
+	entry["id"] = p.ID
+	entry["name"] = p.Name
+	entry["baseUrl"] = p.BaseURL
+	entry["envKey"] = p.EnvKey
+	gc, _ := entry["generationConfig"].(map[string]any)
+	if gc == nil {
+		gc = map[string]any{}
+		entry["generationConfig"] = gc
+	}
+	gc["contextWindowSize"] = float64(p.ContextWindow)
 }

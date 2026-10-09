@@ -27,6 +27,7 @@ arguments) opens a small terminal UI for settings and response times; `lca docto
 | `~/.local/bin/qwen-local` | launcher for Qwen Code, copied from `launchers/qwen-local` |
 | `~/.local/bin/lca` | Go tool built from `cmd/lca`: config editor, Qwen sync, response-time stats |
 | `~/.config/llama-coder/config.env` | model, context, port and sampling settings; written once, never overwritten |
+| `~/.config/llama-coder/qwen/settings.json` | dedicated local model/provider configuration with automatic lean defaults |
 | Model (32 GB+) | `unsloth/Qwen3.6-35B-A3B-GGUF`, file `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (22.4 GB) into `~/models` |
 | Model (16 GB) | `unsloth/Qwen3.5-9B-GGUF`, file `Qwen3.5-9B-UD-Q4_K_XL.gguf` (6.0 GB) into `~/models` |
 
@@ -111,7 +112,7 @@ every time they start. setup.sh seeds it once from the memory profile and never 
 
 ```bash
 lca config show                      # every key and its value
-lca config set CTX 65536             # validated; ALIAS, PORT and CTX also update ~/.qwen/settings.json
+lca config set CTX 65536             # validated; ALIAS, PORT and CTX also prepare the local Qwen settings
 lca config set EXTRA_ARGS --jinja    # extra llama-server flags
 lca config edit                      # $EDITOR, then validate + sync
 lca                                  # the same as a form in the terminal UI (tab 2)
@@ -136,10 +137,16 @@ CTX=32768 llama-coder                # one-off override; PORT works the same way
 
 Restart rules: every key needs a restart of `llama-coder`. `ALIAS`, `PORT` and `CTX` also need a
 restart of `qwen-local`, because Qwen Code reads `modelProviders` at startup. `lca config set`
-prints the hint. setup.sh and `lca sync` write one entry in `~/.qwen/settings.json` under
+prints the hint. setup.sh, `lca sync`, and every `qwen-local` launch prepare
+`${XDG_CONFIG_HOME:-~/.config}/llama-coder/qwen/settings.json`. Its provider entry is under
 `modelProviders.openai[]` with `id` = `ALIAS`, `baseUrl` = `http://127.0.0.1:PORT/v1`,
-`envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize` = `CTX`; every other key in
-that file is left alone. `lca doctor` reports when the entry drifts from config.env.
+`envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize` = `CTX`. Preparation also
+selects the local model, OpenAI authentication, and lean defaults, preserving unrelated settings.
+`qwen-local` sets `QWEN_HOME` to this dedicated directory and passes explicit model, auth,
+base URL, and API key flags, so saved choices from ordinary `qwen` cannot select another model.
+Model/auth/endpoint flags passed to `qwen-local` are rejected; change `ALIAS` or `PORT` through
+`lca config set`. A one-off `PORT=9000 qwen-local` prepares the matching endpoint without
+saving the override to config.env. `lca doctor` reports provider or lean-setting drift.
 If an older config has cache/checkpoint flags in `EXTRA_ARGS`, move their values into
 `CACHE_RAM` / `CTX_CHECKPOINTS` and remove those flags from `EXTRA_ARGS`. The launcher rejects
 duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints`, and `--flag=value` forms.
@@ -152,10 +159,13 @@ request, `--json` is for scripts, `--source qwen|server`, `--days N` and `--mode
 The terminal UI (`lca`, tab 1) shows the same table and, while the server runs, a live line from
 its `/metrics` endpoint every two seconds (`lca metrics` prints one scrape).
 
-- **Qwen Code** writes one JSON line per API call to `~/.qwen/usage/token-usage-YYYY-MM.jsonl`
-  with `apiDurationMs`, input/output tokens, model and caller (`main` or a subagent). This is the
+- **Qwen Code** writes one JSON line per API call to
+  `~/.config/llama-coder/qwen/usage/token-usage-YYYY-MM.jsonl` for `qwen-local`
+  (under `XDG_CONFIG_HOME` when set). Stats also read legacy `~/.qwen/usage` logs and
+  deduplicate records by ID, keeping historical calls visible. Each record includes
+  `apiDurationMs`, input/output tokens, model and caller (`main` or a subagent). This is the
   end-to-end time an agent turn waits for. It is on unless `privacy.usageStatisticsEnabled` is false
-  in `~/.qwen/settings.json`; `lca doctor` warns if it is.
+  in the managed Qwen settings; `lca doctor` warns if it is.
 - **llama-server** logs `prompt eval time`, `eval time` and `total time` with tokens per second
   for every request. `llama-coder` passes `--log-file --log-timestamps --metrics`, writing one
   log per launch to `~/.local/state/llama-coder/server-<UTC time>-<ALIAS>.log`. The timestamps are
@@ -166,11 +176,20 @@ its `/metrics` endpoint every two seconds (`lca metrics` prints one scrape).
 Qwen's output tokens divided by API duration includes prompt processing and queue time; it is
 not a measurement of generation speed. Use server timings to separate those costs.
 
-## Lean Qwen Code profile (opt-in)
+## Lean Qwen Code profile
+
+`qwen-local` automatically uses lean defaults in its dedicated configuration. Start
+`llama-coder`, then `qwen-local` inside your project; no model picker or profile command is needed.
+Ordinary `qwen` retains its own models, credentials, and settings. Local sessions and runtime
+files use the dedicated Qwen directory; existing ordinary Qwen sessions are not migrated.
+Project instructions, permissions, and deliberate project tool settings retain Qwen’s normal
+precedence. Inherited workflow enable/disable variables and `QWEN_RUNTIME_DIR` are cleared by `qwen-local`.
+
+For **ordinary `qwen` only**, the optional reversible profile commands remain available:
 
 ```bash
 lca qwen-profile lean
-# Restart qwen-local; the profile applies to new Qwen Code sessions.
+# Restart ordinary qwen to apply. qwen-local is already lean.
 lca qwen-profile restore
 ```
 
@@ -178,7 +197,8 @@ Lean disables automatic memory extraction, dreaming, automatic skill review, wor
 the `agent` subagent tool. File reading, searching, editing and shell tools remain eager; other
 tools remain discoverable through `tool_search` and `tool_call`. Manual memory commands remain
 available. This reduces background requests and avoids switching a single server slot between
-agent prompts. Normal provider sync does not select a profile.
+agent prompts. Local preparation reapplies lean defaults on each launch. The reversible commands above
+apply only to ordinary Qwen settings.
 
 Only affected settings are saved in `~/.qwen/settings.json.lca-lean.json`, before the settings
 file is changed. Existing disabled tools and unrelated settings are preserved. Reapplying lean
@@ -200,7 +220,7 @@ measurement; M4 and long-task results remain pending. See the [measured report](
 ./tools/install-tools.sh
 ```
 
-This builds `lca`, installs both launchers, and syncs the Qwen provider. It does not install or
+This builds `lca`, installs both launchers, and prepares the dedicated lean Qwen configuration. It does not install or
 upgrade packages, download models, or start/restart a server. Existing config.env is preserved.
 If absent (as with the old static launcher), it seeds config.env from the downloaded model for
 the detected memory profile. Override `MODEL_PATH`, `ALIAS`, `CTX`, and `PORT` for a custom model.
@@ -279,7 +299,8 @@ The server flags live in `launchers/llama-coder`, installed verbatim to `~/.loca
 - On 32 GB+ with memory pressure: `lca config set CTX 65536` (already the default on 16 GB), or
   `CTX=65536 llama-coder` for one run
 - Compaction triggers early? Qwen Code sizes its context from
-  `modelProviders.openai[].generationConfig.contextWindowSize` in `~/.qwen/settings.json`.
+  `modelProviders.openai[].generationConfig.contextWindowSize` in the managed
+  `~/.config/llama-coder/qwen/settings.json`.
   setup.sh and `lca config set CTX` keep it equal to `CTX`; `lca doctor` reports drift, `lca sync` fixes it.
 - Tool calls failing? `lca config set EXTRA_ARGS --jinja`. Recent llama.cpp builds enable it by
   default; harness-bench passed it explicitly.

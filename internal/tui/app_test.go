@@ -91,8 +91,10 @@ func TestConfigEscWritesNothing(t *testing.T) {
 	if string(before) != string(after) {
 		t.Error("config.env changed")
 	}
-	if _, err := os.Stat(filepath.Join(home, ".qwen", "settings.json")); err == nil {
-		t.Error("settings.json was written")
+	for _, settings := range []string{filepath.Join(home, ".qwen", "settings.json"), filepath.Join(home, ".config", "llama-coder", "qwen", "settings.json")} {
+		if _, err := os.Stat(settings); err == nil {
+			t.Error("settings.json was written: " + settings)
+		}
 	}
 }
 

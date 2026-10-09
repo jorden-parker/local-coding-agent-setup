@@ -48,13 +48,13 @@ func Provider(f *config.File) (qwen.Provider, error) {
 	return qwen.ProviderFor(alias, p, c), nil
 }
 
-// SyncQwen writes the provider entry for f into ~/.qwen/settings.json.
+// SyncQwen prepares the managed local provider and lean settings for f.
 func SyncQwen(f *config.File) (qwen.Provider, bool, error) {
 	p, err := Provider(f)
 	if err != nil {
 		return p, false, err
 	}
-	changed, err := qwen.Sync(paths.QwenSettings(), p)
+	changed, err := qwen.PrepareLocal(paths.QwenSettings(), p)
 	return p, changed, err
 }
 
@@ -135,6 +135,8 @@ func Doctor() []Check {
 			add(name, false, paths.Tildify(p)+" missing; run setup.sh")
 		case !strings.Contains(string(b), "config.env"):
 			add(name, false, paths.Tildify(p)+" is the old setup-time version; re-run setup.sh")
+		case name == "qwen-local" && (!strings.Contains(string(b), "QWEN_HOME") || !strings.Contains(string(b), "--auth-type openai --model")):
+			add(name, false, paths.Tildify(p)+" does not pin the local model; run tools/install-tools.sh")
 		default:
 			add(name, true, paths.Tildify(p))
 		}
@@ -157,6 +159,13 @@ func Doctor() []Check {
 			add("qwen provider", false, fmt.Sprintf("entry %q has %s ctx %d, config.env says %s ctx %d; run lca sync", want.ID, got.BaseURL, got.ContextWindow, want.BaseURL, want.ContextWindow))
 		default:
 			add("qwen provider", true, fmt.Sprintf("%s ctx %d", want.ID, want.ContextWindow))
+		}
+	}
+	if err == nil {
+		if err := qwen.CheckLocal(paths.QwenSettings(), want); err != nil {
+			add("qwen local profile", false, err.Error()+"; run lca sync")
+		} else {
+			add("qwen local profile", true, "lean, openai, "+want.ID+" in "+paths.Tildify(paths.QwenSettings()))
 		}
 	}
 	if on, err := qwen.UsageStatsEnabled(paths.QwenSettings()); err != nil {
@@ -249,7 +258,7 @@ func CollectStats(days int, model string, src Source) (Stats, error) {
 		s.Server = stats.FromServer(s.ServerRaw)
 	}
 	if src != SourceServer {
-		recs, skipped, err := qwen.Read(paths.QwenUsageDir(), since)
+		recs, skipped, err := qwen.ReadUsageDirs(since, paths.QwenUsageDir(), paths.LegacyQwenUsageDir())
 		if err != nil {
 			return s, err
 		}

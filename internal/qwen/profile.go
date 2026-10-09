@@ -139,11 +139,11 @@ func ApplyLean(settingsPath, snapshotPath string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if tools, ok := m["tools"].(map[string]any); ok {
-		if search, ok := tools["toolSearch"].(map[string]any); ok && search["enabled"] == false {
-			return false, fmt.Errorf("lean profile needs tools.toolSearch.enabled for deferred tool discovery")
-		}
+	values, err := leanValues(m)
+	if err != nil {
+		return false, err
 	}
+
 	s, exists, err := loadSnapshot(snapshotPath)
 	if err != nil {
 		return false, err
@@ -160,36 +160,11 @@ func ApplyLean(settingsPath, snapshotPath string) (bool, error) {
 				s.MissingGroups = append(s.MissingGroups, group)
 			}
 		}
-		for path, value := range leanSettings {
-			before, err := stateAt(m, path)
-			if err != nil {
-				return false, err
-			}
-			if path == "tools.disabled" && before.Present {
-				list, ok := before.Value.([]any)
-				if !ok {
-					return false, fmt.Errorf("settings.tools.disabled must be an array")
-				}
-				merged := append([]any{}, list...)
-				found := false
-				for _, v := range list {
-					if _, ok := v.(string); !ok {
-						return false, fmt.Errorf("settings.tools.disabled entries must be strings")
-					}
-					if v == "tool_search" || v == "tool_call" {
-						return false, fmt.Errorf("lean profile needs %s enabled for deferred tool discovery", v)
-					}
-					if v == "agent" {
-						found = true
-					}
-				}
-				if !found {
-					merged = append(merged, "agent")
-				}
-				value = merged
-			}
+		for path, value := range values {
+			before, _ := stateAt(m, path) // Validated by leanValues.
 			s.Fields[path] = profileField{Before: before, Applied: settingState{Present: true, Value: value}}
 		}
+
 		if err := writeJSON(snapshotPath, s); err != nil {
 			return false, err
 		}
@@ -235,4 +210,44 @@ func RestoreLean(settingsPath, snapshotPath string) (bool, error) {
 		return false, fmt.Errorf("settings restored; cannot remove snapshot: %w", err)
 	}
 	return true, nil
+}
+
+// leanValues validates profile settings and preserves additional disabled tools.
+// Both managed preparation and the reversible profile use the same defaults.
+func leanValues(m map[string]any) (map[string]any, error) {
+	if tools, ok := m["tools"].(map[string]any); ok {
+		if search, ok := tools["toolSearch"].(map[string]any); ok && search["enabled"] == false {
+			return nil, fmt.Errorf("lean profile needs tools.toolSearch.enabled for deferred tool discovery")
+		}
+	}
+	values := make(map[string]any, len(leanSettings))
+	for path, value := range leanSettings {
+		before, err := stateAt(m, path)
+		if err != nil {
+			return nil, err
+		}
+		if path == "tools.disabled" && before.Present {
+			list, ok := before.Value.([]any)
+			if !ok {
+				return nil, fmt.Errorf("settings.tools.disabled must be an array")
+			}
+			merged := append([]any{}, list...)
+			found := false
+			for _, tool := range list {
+				if _, ok := tool.(string); !ok {
+					return nil, fmt.Errorf("settings.tools.disabled entries must be strings")
+				}
+				if tool == "tool_search" || tool == "tool_call" {
+					return nil, fmt.Errorf("lean profile needs %s enabled for deferred tool discovery", tool)
+				}
+				found = found || tool == "agent"
+			}
+			if !found {
+				merged = append(merged, "agent")
+			}
+			value = merged
+		}
+		values[path] = value
+	}
+	return values, nil
 }

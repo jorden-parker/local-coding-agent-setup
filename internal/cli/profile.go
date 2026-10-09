@@ -9,7 +9,7 @@ import (
 )
 
 func qwenProfileCmd() *cobra.Command {
-	c := &cobra.Command{Use: "qwen-profile", Short: "Apply or restore the opt-in lean Qwen Code profile"}
+	c := &cobra.Command{Use: "qwen-profile", Short: "Apply or restore lean for ordinary qwen (qwen-local is always lean)"}
 	for _, action := range []string{"lean", "restore"} {
 		short := "Disable background memory work and subagents; defer optional tool schemas"
 		if action == "restore" {
@@ -18,7 +18,7 @@ func qwenProfileCmd() *cobra.Command {
 		c.AddCommand(&cobra.Command{
 			Use: action, Short: short, Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				settings := paths.QwenSettings()
+				settings := paths.LegacyQwenSettings()
 				snapshot := settings + ".lca-lean.json"
 				operation := qwen.ApplyLean
 				if cmd.Name() == "restore" {
@@ -31,9 +31,9 @@ func qwenProfileCmd() *cobra.Command {
 				if !changed {
 					fmt.Println("Already up to date.")
 				} else if cmd.Name() == "restore" {
-					fmt.Printf("%s: original profile settings restored. Restart qwen-local to apply.\n", paths.Tildify(settings))
+					fmt.Printf("%s: original profile settings restored. Restart ordinary qwen to apply; qwen-local has its own lean settings.\n", paths.Tildify(settings))
 				} else {
-					fmt.Printf("%s: lean profile applied. Restart qwen-local to apply.\n", paths.Tildify(settings))
+					fmt.Printf("%s: lean profile applied. Restart ordinary qwen to apply; qwen-local has its own lean settings.\n", paths.Tildify(settings))
 				}
 				return nil
 			},

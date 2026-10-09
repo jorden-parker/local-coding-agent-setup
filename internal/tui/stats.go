@@ -107,7 +107,7 @@ func (s *statsScreen) setStyles(st styles) {
 
 func (s *statsScreen) view(st styles, width int) string {
 	var b strings.Builder
-	src := "Qwen Code API calls (apiDurationMs) from " + paths.Tildify(paths.QwenUsageDir())
+	src := "Qwen Code API calls (apiDurationMs) from " + paths.Tildify(paths.QwenUsageDir()) + " and " + paths.Tildify(paths.LegacyQwenUsageDir())
 	if s.src == app.SourceServer {
 		src = "llama-server requests (total time) from " + paths.Tildify(paths.Timings())
 	}

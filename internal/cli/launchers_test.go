@@ -101,3 +101,89 @@ func TestLauncherRejectsDuplicateCacheFlags(t *testing.T) {
 		})
 	}
 }
+
+func qwenLauncherFixture(t *testing.T) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("PATH", dir+":/usr/bin:/bin")
+	t.Setenv("QWEN_HOME", filepath.Join(dir, "remote"))
+	t.Setenv("QWEN_RUNTIME_DIR", filepath.Join(dir, "remote-runtime"))
+	t.Setenv("QWEN_CODE_ENABLE_WORKFLOWS", "true")
+	t.Setenv("QWEN_CODE_DISABLE_WORKFLOWS", "false")
+	t.Setenv("PORT", "9000")
+	t.Setenv("OPENAI_MODEL", "remote")
+	t.Setenv("OPENAI_BASE_URL", "https://remote.invalid/v1")
+	t.Setenv("CAPTURE", filepath.Join(dir, "capture"))
+	configDir := filepath.Join(dir, "config", "llama-coder")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.env"), []byte("ALIAS=local\nPORT=8080\nCTX=65536\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"curl": "#!/bin/bash\nprintf '%s\\n' \"$@\" > \"$CAPTURE.health\"\nexit ${HEALTH_EXIT:-0}\n",
+		"lca":  "#!/bin/bash\nprintf '%s\\n' \"$@\" > \"$CAPTURE.sync\"\nexit ${SYNC_EXIT:-0}\n",
+		"qwen": "#!/bin/bash\nprintf '%s\\n' \"$@\" > \"$CAPTURE.args\"\nprintf '%s\\n' \"$QWEN_HOME\" \"$OPENAI_MODEL\" \"$OPENAI_BASE_URL\" \"$OPENAI_API_KEY\" \"${QWEN_CODE_ENABLE_WORKFLOWS-unset}\" \"${QWEN_CODE_DISABLE_WORKFLOWS-unset}\" \"${QWEN_RUNTIME_DIR-unset}\" > \"$CAPTURE.env\"\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, file, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(file), "../../launchers/qwen-local"), filepath.Join(dir, "capture")
+}
+
+func TestQwenLauncherPinsSelectionAndForwardsArguments(t *testing.T) {
+	launcher, capture := qwenLauncherFixture(t)
+	if out, err := exec.Command("/bin/bash", launcher, "-p", "hello world", "--output-format", "json").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	args, _ := os.ReadFile(capture + ".args")
+	want := "--auth-type\nopenai\n--model\nlocal\n--openai-base-url\nhttp://127.0.0.1:9000/v1\n--openai-api-key\nlocal\n-p\nhello world\n--output-format\njson\n"
+	if string(args) != want {
+		t.Fatalf("args: %q", args)
+	}
+	env, _ := os.ReadFile(capture + ".env")
+	want = filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen") + "\nlocal\nhttp://127.0.0.1:9000/v1\nlocal\nunset\nunset\nunset\n"
+	if string(env) != want {
+		t.Fatalf("env: %q", env)
+	}
+	sync, _ := os.ReadFile(capture + ".sync")
+	if string(sync) != "sync\n--port\n9000\n" {
+		t.Fatalf("sync: %q", sync)
+	}
+	health, _ := os.ReadFile(capture + ".health")
+	if !strings.Contains(string(health), "http://127.0.0.1:9000/health") {
+		t.Fatal("health uses wrong port")
+	}
+}
+
+func TestQwenLauncherStopsOnConflictsAndFailures(t *testing.T) {
+	for _, arg := range []string{"-m", "-mremote", "--model=remote", "--auth-type", "--openai-base-url=https://remote.invalid", "--openai-api-key", "--authType=anthropic", "--openaiBaseUrl=https://remote.invalid", "--openaiApiKey=remote"} {
+		t.Run(arg, func(t *testing.T) {
+			launcher, capture := qwenLauncherFixture(t)
+			out, err := exec.Command("/bin/bash", launcher, arg).CombinedOutput()
+			if err == nil || !strings.Contains(string(out), "lca config set") {
+				t.Fatalf("conflict: %v %s", err, out)
+			}
+			if _, err := os.Stat(capture + ".args"); !os.IsNotExist(err) {
+				t.Fatal("Qwen launched")
+			}
+		})
+	}
+	for _, env := range []string{"HEALTH_EXIT", "SYNC_EXIT"} {
+		t.Run(env, func(t *testing.T) {
+			launcher, capture := qwenLauncherFixture(t)
+			t.Setenv(env, "1")
+			if out, err := exec.Command("/bin/bash", launcher).CombinedOutput(); err == nil {
+				t.Fatalf("failure ignored: %s", out)
+			}
+			if _, err := os.Stat(capture + ".args"); !os.IsNotExist(err) {
+				t.Fatal("Qwen launched after failure")
+			}
+		})
+	}
+}

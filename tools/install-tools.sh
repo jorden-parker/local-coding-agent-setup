@@ -59,4 +59,4 @@ install -m 755 "$build_dir/lca" "$bin_dir/lca"
 install -m 755 "$root/launchers/llama-coder" "$bin_dir/llama-coder"
 install -m 755 "$root/launchers/qwen-local" "$bin_dir/qwen-local"
 "$bin_dir/lca" sync
-printf 'Updated tools. Start llama-coder, then qwen-local. Lean profile: lca qwen-profile lean\n'
+printf 'Updated tools. Start llama-coder, then qwen-local. qwen-local automatically uses its own lean profile\n'

@@ -3,8 +3,7 @@
 # Installed by setup.sh. Reads ALIAS and PORT from
 # ${XDG_CONFIG_HOME:-~/.config}/llama-coder/config.env; PORT= in the
 # environment overrides the file. Must match the PORT llama-coder used.
-# OPENAI_API_KEY must be set (any value) or Qwen Code will not select the
-# OpenAI-compatible auth type (Qwen Code docs: users/configuration/auth.md).
+# Uses a dedicated QWEN_HOME and explicitly selects the configured local model.
 set -eo pipefail
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder/config.env"
@@ -16,11 +15,27 @@ source "$CONFIG"
 [[ -n "$env_port" ]] && PORT="$env_port"
 [[ -n "${ALIAS:-}" && -n "${PORT:-}" ]] || { echo "ALIAS and PORT must be set in $CONFIG" >&2; exit 1; }
 
+# These settings belong to config.env. Do not let forwarded flags undo them.
+for arg in "$@"; do
+  [[ "$arg" == -- ]] && break
+  case "$arg" in
+    -m|-m?*|--model|--model=*|--auth-type|--auth-type=*|--authType|--authType=*|--openai-base-url|--openai-base-url=*|--openaiBaseUrl|--openaiBaseUrl=*|--openai-api-key|--openai-api-key=*|--openaiApiKey|--openaiApiKey=*)
+      echo "qwen-local owns model, auth and endpoint selection. Change ALIAS/PORT with lca config set; remove $arg." >&2
+      exit 1
+      ;;
+  esac
+done
+command -v lca >/dev/null 2>&1 || { echo "lca is missing. Run tools/install-tools.sh first." >&2; exit 1; }
+
 if ! curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
   echo "llama-server is not running on port ${PORT}. Start it with: llama-coder" >&2
   exit 1
 fi
+export QWEN_HOME="$(dirname -- "$CONFIG")/qwen"
+unset QWEN_CODE_ENABLE_WORKFLOWS QWEN_CODE_DISABLE_WORKFLOWS QWEN_RUNTIME_DIR
+lca sync --port "$PORT" >/dev/null
 export OPENAI_BASE_URL="http://127.0.0.1:${PORT}/v1"
 export OPENAI_API_KEY="local"
 export OPENAI_MODEL="$ALIAS"
-exec qwen "$@"
+exec qwen --auth-type openai --model "$ALIAS" \
+  --openai-base-url "$OPENAI_BASE_URL" --openai-api-key "$OPENAI_API_KEY" "$@"

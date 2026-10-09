@@ -52,7 +52,7 @@ BIN_DIR="$HOME/.local/bin"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder"
 CONFIG="$CONFIG_DIR/config.env"
-QWEN_SETTINGS="$HOME/.qwen/settings.json"
+QWEN_SETTINGS="$CONFIG_DIR/qwen/settings.json"
 log "Memory profile: ${PROFILE}"
 if (( MEM_GB < 32 )) && [[ "$MODEL_FILE" == Qwen3.6-35B-A3B-* ]]; then
   echo "Warning: ${MODEL_FILE} needs ~23 GB plus context. ${MEM_GB} GB is tight."
@@ -133,10 +133,10 @@ log "Building ${BIN_DIR}/lca"
 LCA_VERSION=$(git -C "$SCRIPT_DIR" describe --tags --always 2>/dev/null || echo dev)
 (cd "$SCRIPT_DIR" && go build -trimpath -ldflags "-s -w -X main.version=${LCA_VERSION}" -o "$BIN_DIR/lca" ./cmd/lca)
 
-# --- 7. Qwen Code provider entry ----------------------------------------------
+# --- 7. Managed lean Qwen Code configuration ----------------------------------------------
 # Qwen sizes its context from modelProviders.openai[].generationConfig.contextWindowSize;
-# without it, compaction triggers early. lca sync merges one entry keyed by ALIAS.
-log "Syncing ${QWEN_SETTINGS} (provider ${ALIAS}, contextWindowSize ${CTX})"
+# without it, compaction triggers early. lca sync also selects the model and lean defaults.
+log "Preparing lean ${QWEN_SETTINGS} (provider ${ALIAS}, contextWindowSize ${CTX})"
 "$BIN_DIR/lca" sync
 
 # --- 8. PATH hint ------------------------------------------------------------
@@ -162,7 +162,7 @@ Server:  http://127.0.0.1:${PORT}   (context ${CTX} tokens)
 Config:  ${CONFIG}
          change with: lca config set CTX 65536   (or just: lca)
          one-off:     CTX=65536 llama-coder
-Qwen:    ${QWEN_SETTINGS} now has provider ${ALIAS} with contextWindowSize ${CTX}
+Qwen:    ${QWEN_SETTINGS} uses lean defaults and model ${ALIAS} with contextWindowSize ${CTX}
 Timing:  server logs in ${XDG_STATE_HOME:-$HOME/.local/state}/llama-coder; review with: lca stats
 Check:                    lca doctor
 Benchmark:                llama-bench -m "${MODEL_PATH}" -ngl 99 -p 512 -n 128

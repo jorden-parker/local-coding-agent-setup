@@ -145,13 +145,18 @@ func showConfig() error {
 }
 
 func syncCmd() *cobra.Command {
-	return &cobra.Command{
+	var port string
+	c := &cobra.Command{
 		Use:   "sync",
-		Short: "Write the ALIAS/PORT/CTX provider entry into ~/.qwen/settings.json",
+		Short: "Prepare the local Qwen model, provider and lean settings",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := app.LoadConfig()
 			if err != nil {
 				return err
+			}
+			if cmd.Flags().Changed("port") {
+				f.Set("PORT", port) // Runtime override only; config.env is not saved.
 			}
 			p, changed, err := app.SyncQwen(f)
 			if err != nil {
@@ -165,4 +170,6 @@ func syncCmd() *cobra.Command {
 			return nil
 		},
 	}
+	c.Flags().StringVar(&port, "port", "", "Use this server port without changing config.env")
+	return c
 }

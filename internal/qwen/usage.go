@@ -65,3 +65,29 @@ func Read(dir string, since time.Time) ([]Record, int, error) {
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Timestamp.Before(out[j].Timestamp) })
 	return out, skipped, nil
 }
+
+// ReadUsageDirs merges managed and legacy usage, preferring the first directory
+// for duplicate IDs. Records without IDs remain distinct.
+func ReadUsageDirs(since time.Time, dirs ...string) ([]Record, int, error) {
+	var out []Record
+	seen := map[string]bool{}
+	skipped := 0
+	for _, dir := range dirs {
+		records, n, err := Read(dir, since)
+		skipped += n
+		if err != nil {
+			return nil, skipped, err
+		}
+		for _, r := range records {
+			if r.ID != "" && seen[r.ID] {
+				continue
+			}
+			if r.ID != "" {
+				seen[r.ID] = true
+			}
+			out = append(out, r)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Timestamp.Before(out[j].Timestamp) })
+	return out, skipped, nil
+}
