@@ -34,9 +34,13 @@ func TestPrepareLocalSelectionLeanAndDrift(t *testing.T) {
 			t.Fatalf("%s: %#v %v", key, got, err)
 		}
 	}
+	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{localSkillsDir}) {
+		t.Fatalf("skills.directories: %#v", dirs)
+	}
 	m["model"].(map[string]any)["name"] = "remote"
 	m["memory"].(map[string]any)["enableAutoSkill"] = true
 	m["tools"].(map[string]any)["disabled"] = []any{"web_fetch"}
+	m["skills"].(map[string]any)["directories"] = []any{"/shared/skills"}
 	m["ui"] = map[string]any{"theme": "mine"}
 	if err := writeJSON(path, m); err != nil {
 		t.Fatal(err)
@@ -64,10 +68,32 @@ func TestPrepareLocalSelectionLeanAndDrift(t *testing.T) {
 	if m["ui"].(map[string]any)["theme"] != "mine" || !reflect.DeepEqual(m["tools"].(map[string]any)["disabled"], []any{"web_fetch", "agent"}) {
 		t.Fatal("unrelated settings lost")
 	}
+	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{"/shared/skills", localSkillsDir}) {
+		t.Fatalf("existing skills.directories not kept: %#v", dirs)
+	}
+}
+
+func TestPrepareLocalKeepsExistingSkillsDirectories(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	body := `{"skills":{"directories":["/shared/skills","~/.qwen/skills"]}}`
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p := ProviderFor("local", 8080, 65536)
+	if _, err := PrepareLocal(path, p); err != nil {
+		t.Fatal(err)
+	}
+	m, _, _ := loadSettings(path)
+	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{"/shared/skills", localSkillsDir}) {
+		t.Fatalf("skills.directories: %#v", dirs)
+	}
+	if changed, err := PrepareLocal(path, p); err != nil || changed {
+		t.Fatalf("repeat: %v %v", changed, err)
+	}
 }
 
 func TestPrepareLocalInvalidSettingsDoNotWrite(t *testing.T) {
-	for _, body := range []string{`{`, `{"model":null}`, `{"security":{"auth":false}}`, `{"tools":false}`, `{"memory":null}`, `{"tools":{"disabled":[42]}}`, `{"tools":{"disabled":"agent"}}`, `{"tools":{"disabled":["tool_search"]}}`, `{"tools":{"disabled":["tool_call"]}}`, `{"tools":{"toolSearch":{"enabled":false}}}`} {
+	for _, body := range []string{`{`, `{"model":null}`, `{"security":{"auth":false}}`, `{"tools":false}`, `{"memory":null}`, `{"tools":{"disabled":[42]}}`, `{"tools":{"disabled":"agent"}}`, `{"tools":{"disabled":["tool_search"]}}`, `{"tools":{"disabled":["tool_call"]}}`, `{"tools":{"toolSearch":{"enabled":false}}}`, `{"skills":false}`, `{"skills":{"directories":"~/.qwen/skills"}}`, `{"skills":{"directories":[42]}}`} {
 		t.Run(body, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "settings.json")
 			if err := os.WriteFile(path, []byte(body), 0600); err != nil {
