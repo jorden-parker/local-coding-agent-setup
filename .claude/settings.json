@@ -6,9 +6,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; case \"$f\" in *.sh) bash -n \"$f\" && shellcheck \"$f\" || exit 2;; esac; }",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check.sh",
             "timeout": 30,
-            "statusMessage": "shellcheck"
+            "statusMessage": "shellcheck / go vet"
           }
         ]
       }

@@ -1,0 +1,706 @@
+{
+  "metadata": {
+    "qwen_version": "0.25.0",
+    "base_url": "http://127.0.0.1:53341",
+    "alias": "qwen3.5-9b",
+    "ctx": 65536,
+    "task": "Find calc.py with glob and search for its return statement, then read it.\nUse tool_search once with query \"select:web_fetch\" to inspect that deferred schema;\ndo not invoke web_fetch.\nFix add(a, b) to return their sum. Create test_calc.py\nusing unittest with tests for positive integers, negative integers and zero.\nRun python3 -m unittest -v. Finish when all three tests pass. Do not use subagents.\nDo not modify any files outside this project. Keep your final reply to one sentence.",
+    "max_output_tokens": 512,
+    "repetitions": 3
+  },
+  "runs": [
+    {
+      "profile": "normal",
+      "repetition": 0,
+      "total_ms": 309702.5339999964,
+      "returncode": 0,
+      "behaviour_ok": true,
+      "tests_ok": true,
+      "shell_executed": true,
+      "discovery_ok": true,
+      "available_tools": [
+        "read_file",
+        "grep_search",
+        "list_agents",
+        "task_stop",
+        "send_message",
+        "skill",
+        "glob",
+        "record_artifact",
+        "get_goal",
+        "update_goal",
+        "tool_call",
+        "agent",
+        "run_shell_command",
+        "report_findings",
+        "enter_worktree",
+        "exit_worktree",
+        "tool_search",
+        "write_file",
+        "edit"
+      ],
+      "tool_stats": {
+        "glob": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 37,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "tool_search": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 4,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "read_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 9,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "edit": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 24,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "write_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 24,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "run_shell_command": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 138,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        }
+      },
+      "request_sources": {
+        "main": 6,
+        "managed-auto-memory-extractor": 1
+      },
+      "request_count": 7,
+      "first_input_tokens": 15746,
+      "main_api_duration_ms": 229770,
+      "main_output_tokens": 440,
+      "background_api_duration_ms": 78598
+    },
+    {
+      "profile": "lean",
+      "repetition": 0,
+      "total_ms": 176588.2143330091,
+      "returncode": 0,
+      "behaviour_ok": true,
+      "tests_ok": true,
+      "shell_executed": true,
+      "discovery_ok": true,
+      "available_tools": [
+        "read_file",
+        "grep_search",
+        "list_agents",
+        "task_stop",
+        "send_message",
+        "skill",
+        "glob",
+        "record_artifact",
+        "get_goal",
+        "update_goal",
+        "tool_call",
+        "run_shell_command",
+        "report_findings",
+        "enter_worktree",
+        "exit_worktree",
+        "tool_search",
+        "write_file",
+        "edit"
+      ],
+      "tool_stats": {
+        "glob": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 25,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "tool_search": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 1,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "read_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 14,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "edit": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 30,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "write_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 24,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "run_shell_command": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 257,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        }
+      },
+      "request_sources": {
+        "main": 6
+      },
+      "request_count": 6,
+      "first_input_tokens": 10292,
+      "main_api_duration_ms": 175057,
+      "main_output_tokens": 495,
+      "background_api_duration_ms": 0
+    },
+    {
+      "profile": "lean",
+      "repetition": 1,
+      "total_ms": 181868.26204200042,
+      "returncode": 0,
+      "behaviour_ok": true,
+      "tests_ok": true,
+      "shell_executed": true,
+      "discovery_ok": true,
+      "available_tools": [
+        "read_file",
+        "grep_search",
+        "list_agents",
+        "task_stop",
+        "send_message",
+        "skill",
+        "glob",
+        "record_artifact",
+        "get_goal",
+        "update_goal",
+        "tool_call",
+        "run_shell_command",
+        "report_findings",
+        "enter_worktree",
+        "exit_worktree",
+        "tool_search",
+        "write_file",
+        "edit"
+      ],
+      "tool_stats": {
+        "glob": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 29,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "tool_search": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 3,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "read_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 10,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "edit": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 48,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "write_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 30,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "run_shell_command": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 347,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        }
+      },
+      "request_sources": {
+        "main": 6
+      },
+      "request_count": 6,
+      "first_input_tokens": 10296,
+      "main_api_duration_ms": 180111,
+      "main_output_tokens": 510,
+      "background_api_duration_ms": 0
+    },
+    {
+      "profile": "normal",
+      "repetition": 1,
+      "total_ms": 374633.97533299576,
+      "returncode": 0,
+      "behaviour_ok": true,
+      "tests_ok": true,
+      "shell_executed": true,
+      "discovery_ok": true,
+      "available_tools": [
+        "read_file",
+        "grep_search",
+        "list_agents",
+        "task_stop",
+        "send_message",
+        "skill",
+        "glob",
+        "record_artifact",
+        "get_goal",
+        "update_goal",
+        "tool_call",
+        "agent",
+        "run_shell_command",
+        "report_findings",
+        "enter_worktree",
+        "exit_worktree",
+        "tool_search",
+        "write_file",
+        "edit"
+      ],
+      "tool_stats": {
+        "glob": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 33,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "tool_search": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 2,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "read_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 16,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "edit": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 41,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "write_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 30,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "run_shell_command": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 194,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        }
+      },
+      "request_sources": {
+        "main": 6,
+        "managed-auto-memory-extractor": 1
+      },
+      "request_count": 7,
+      "first_input_tokens": 15740,
+      "main_api_duration_ms": 285895,
+      "main_output_tokens": 438,
+      "background_api_duration_ms": 86809
+    },
+    {
+      "profile": "normal",
+      "repetition": 2,
+      "total_ms": 342734.40375000064,
+      "returncode": 0,
+      "behaviour_ok": true,
+      "tests_ok": true,
+      "shell_executed": true,
+      "discovery_ok": true,
+      "available_tools": [
+        "read_file",
+        "grep_search",
+        "list_agents",
+        "task_stop",
+        "send_message",
+        "skill",
+        "glob",
+        "record_artifact",
+        "get_goal",
+        "update_goal",
+        "tool_call",
+        "agent",
+        "run_shell_command",
+        "report_findings",
+        "enter_worktree",
+        "exit_worktree",
+        "tool_search",
+        "write_file",
+        "edit"
+      ],
+      "tool_stats": {
+        "glob": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 18,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "tool_search": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 1,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "read_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 27,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "edit": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 35,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "write_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 21,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "run_shell_command": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 152,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        }
+      },
+      "request_sources": {
+        "main": 6,
+        "managed-auto-memory-extractor": 1
+      },
+      "request_count": 7,
+      "first_input_tokens": 15758,
+      "main_api_duration_ms": 250036,
+      "main_output_tokens": 441,
+      "background_api_duration_ms": 90970
+    },
+    {
+      "profile": "lean",
+      "repetition": 2,
+      "total_ms": 193715.97483300138,
+      "returncode": 0,
+      "behaviour_ok": true,
+      "tests_ok": true,
+      "shell_executed": true,
+      "discovery_ok": true,
+      "available_tools": [
+        "read_file",
+        "grep_search",
+        "list_agents",
+        "task_stop",
+        "send_message",
+        "skill",
+        "glob",
+        "record_artifact",
+        "get_goal",
+        "update_goal",
+        "tool_call",
+        "run_shell_command",
+        "report_findings",
+        "enter_worktree",
+        "exit_worktree",
+        "tool_search",
+        "write_file",
+        "edit"
+      ],
+      "tool_stats": {
+        "glob": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 18,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "tool_search": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 2,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "read_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 15,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "edit": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 34,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "write_file": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 23,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        },
+        "run_shell_command": {
+          "count": 1,
+          "success": 1,
+          "fail": 0,
+          "durationMs": 154,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          }
+        }
+      },
+      "request_sources": {
+        "main": 6
+      },
+      "request_count": 6,
+      "first_input_tokens": 10294,
+      "main_api_duration_ms": 192318,
+      "main_output_tokens": 495,
+      "background_api_duration_ms": 0
+    }
+  ],
+  "medians": {
+    "normal": {
+      "total_ms": 342734.40375000064,
+      "first_input_tokens": 15746,
+      "main_api_duration_ms": 250036,
+      "background_api_duration_ms": 86809
+    },
+    "lean": {
+      "total_ms": 181868.26204200042,
+      "first_input_tokens": 10294,
+      "main_api_duration_ms": 180111,
+      "background_api_duration_ms": 0
+    }
+  },
+  "latency_reduction_percent": 46.936093939766884
+}

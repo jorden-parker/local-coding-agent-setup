@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Starts the local model server. Ctrl-C to stop. Installed by setup.sh.
+# Reads ${XDG_CONFIG_HOME:-~/.config}/llama-coder/config.env; CTX= and PORT= in
+# the environment override the file for one run. Edit the file with `lca config`.
+#
+# Notes for Apple Metal (from llama.cpp maintainers, issue #23011):
+#   - no --cache-type-k/v: quantised KV cache is not optimised for Metal
+#   - no MTP speculative decoding: slower than baseline on Metal for this model
+# Thinking is off by default for fast agent turns. Sampling defaults are
+# Unsloth's non-thinking recommendations for Qwen3.5/3.6.
+# Host cache/checkpoint flags: llama.cpp tools/server/README.md at d81235049.
+set -eo pipefail
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder/config.env"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/llama-coder"
+[[ -f "$CONFIG" ]] || { echo "Missing $CONFIG. Run setup.sh first." >&2; exit 1; }
+
+env_ctx="${CTX:-}"
+env_port="${PORT:-}"
+# shellcheck source=/dev/null
+source "$CONFIG"
+[[ -n "$env_ctx" ]] && CTX="$env_ctx"
+[[ -n "$env_port" ]] && PORT="$env_port"
+
+[[ -n "${MODEL_PATH:-}" && -f "$MODEL_PATH" ]] || { echo "MODEL_PATH ($MODEL_PATH) is not a file. Fix with: lca config set MODEL_PATH /path/to/model.gguf" >&2; exit 1; }
+[[ -n "${ALIAS:-}" && -n "${CTX:-}" && -n "${PORT:-}" ]] || { echo "ALIAS, CTX and PORT must be set in $CONFIG" >&2; exit 1; }
+
+extra=()
+read -ra extra <<< "${EXTRA_ARGS:-}"
+for arg in ${extra[@]+"${extra[@]}"}; do
+  case "${arg%%=*}" in
+    --cache-ram|-cram)
+      echo "EXTRA_ARGS must not contain ${arg%%=*}; set CACHE_RAM in $CONFIG instead." >&2
+      exit 1
+      ;;
+    --ctx-checkpoints|-ctxcp|--swa-checkpoints)
+      echo "EXTRA_ARGS must not contain ${arg%%=*}; set CTX_CHECKPOINTS in $CONFIG instead." >&2
+      exit 1
+      ;;
+  esac
+done
+
+mkdir -p "$STATE"
+# Fold the previous run's timing lines into timings.jsonl and prune old logs.
+if command -v lca >/dev/null 2>&1; then
+  lca compact --quiet || true
+fi
+LOG="$STATE/server-$(date -u +%Y%m%dT%H%M%SZ)-${ALIAS}.log"
+
+thinking=false
+[[ "${THINKING:-false}" == "true" ]] && thinking=true
+
+echo "llama-server: ${ALIAS} ctx ${CTX} port ${PORT}; log ${LOG}" >&2
+exec llama-server \
+  -m "$MODEL_PATH" --alias "$ALIAS" \
+  -c "$CTX" -fa on -ngl 99 -np 1 \
+  --cache-ram "${CACHE_RAM:-8192}" --ctx-checkpoints "${CTX_CHECKPOINTS:-32}" \
+  --temp "${TEMP:-0.7}" --top-p "${TOP_P:-0.8}" --top-k "${TOP_K:-20}" --min-p "${MIN_P:-0.0}" --presence-penalty "${PRESENCE_PENALTY:-1.5}" \
+  --chat-template-kwargs "{\"enable_thinking\":${thinking}}" \
+  --host 127.0.0.1 --port "$PORT" \
+  --log-file "$LOG" --log-timestamps --metrics \
+  ${extra[@]+"${extra[@]}"} \
+  "$@"

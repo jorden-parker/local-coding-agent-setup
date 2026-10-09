@@ -1,0 +1,1111 @@
+{
+  "profile": "m1",
+  "machine": "Apple M1\n17179869184",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "runtime": "version: 0.6.0 (build 11429, commit d81235049)\nbuilt with AppleClang 21.0.0.21000334 for Darwin arm64",
+  "model": "/Users/jorden/models/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf",
+  "model_bytes": 5966095584,
+  "ctx": 65536,
+  "prompt_tokens": 2048,
+  "max_tokens": 16,
+  "repetitions": 3,
+  "results": [
+    {
+      "variant": "baseline",
+      "argv": [
+        "llama-server",
+        "-m",
+        "/Users/jorden/models/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf",
+        "--alias",
+        "benchmark",
+        "-c",
+        "65536",
+        "-fa",
+        "on",
+        "-ngl",
+        "99",
+        "-np",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "--cache-ram",
+        "8192",
+        "--ctx-checkpoints",
+        "32",
+        "--temp",
+        "0.7",
+        "--top-p",
+        "0.8",
+        "--top-k",
+        "20",
+        "--min-p",
+        "0",
+        "--presence-penalty",
+        "1.5",
+        "--chat-template-kwargs",
+        "{\"enable_thinking\":false}",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "52712",
+        "--jinja",
+        "--metrics",
+        "--verbosity",
+        "5"
+      ],
+      "tool_call_ok": true,
+      "swap_growth_mib": 1209.8100000000004,
+      "memory_samples": [
+        {
+          "swap_used_mib": 5316.0,
+          "rss_kib": "8162096",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 28%"
+        },
+        {
+          "swap_used_mib": 5292.0,
+          "rss_kib": "8250096",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 28%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8210576",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8210576",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8211600",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8211600",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8211600",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8212112",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8212096",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8212096",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8300800",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8300800",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8293552",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5268.0,
+          "rss_kib": "8347936",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 5260.0,
+          "rss_kib": "8398128",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 26%"
+        },
+        {
+          "swap_used_mib": 5252.0,
+          "rss_kib": "8781888",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 24%"
+        },
+        {
+          "swap_used_mib": 5252.0,
+          "rss_kib": "8782160",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 25%"
+        },
+        {
+          "swap_used_mib": 5252.0,
+          "rss_kib": "8774080",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 24%"
+        },
+        {
+          "swap_used_mib": 5195.94,
+          "rss_kib": "8522768",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 23%"
+        },
+        {
+          "swap_used_mib": 5195.94,
+          "rss_kib": "8495952",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 23%"
+        },
+        {
+          "swap_used_mib": 5195.94,
+          "rss_kib": "8350400",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 22%"
+        },
+        {
+          "swap_used_mib": 5195.94,
+          "rss_kib": "8332768",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 21%"
+        },
+        {
+          "swap_used_mib": 5187.94,
+          "rss_kib": "8128464",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 20%"
+        },
+        {
+          "swap_used_mib": 5179.94,
+          "rss_kib": "8085008",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 20%"
+        },
+        {
+          "swap_used_mib": 5171.94,
+          "rss_kib": "8193584",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 20%"
+        },
+        {
+          "swap_used_mib": 5171.94,
+          "rss_kib": "8191728",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 21%"
+        },
+        {
+          "swap_used_mib": 5163.94,
+          "rss_kib": "8186512",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 19%"
+        },
+        {
+          "swap_used_mib": 5163.94,
+          "rss_kib": "8172368",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 18%"
+        },
+        {
+          "swap_used_mib": 5163.94,
+          "rss_kib": "8707328",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 20%"
+        },
+        {
+          "swap_used_mib": 5163.94,
+          "rss_kib": "8806688",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 20%"
+        },
+        {
+          "swap_used_mib": 5163.94,
+          "rss_kib": "8966000",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 18%"
+        },
+        {
+          "swap_used_mib": 5163.94,
+          "rss_kib": "8576224",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 16%"
+        },
+        {
+          "swap_used_mib": 5155.94,
+          "rss_kib": "8523296",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 19%"
+        },
+        {
+          "swap_used_mib": 5155.94,
+          "rss_kib": "8368528",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 19%"
+        },
+        {
+          "swap_used_mib": 5155.94,
+          "rss_kib": "8369568",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 20%"
+        },
+        {
+          "swap_used_mib": 5155.94,
+          "rss_kib": "8091744",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 17%"
+        },
+        {
+          "swap_used_mib": 5155.94,
+          "rss_kib": "8026352",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 17%"
+        },
+        {
+          "swap_used_mib": 5147.94,
+          "rss_kib": "8053520",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 17%"
+        },
+        {
+          "swap_used_mib": 5123.94,
+          "rss_kib": "8050832",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 16%"
+        },
+        {
+          "swap_used_mib": 5091.94,
+          "rss_kib": "8150160",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5083.94,
+          "rss_kib": "8096400",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5067.94,
+          "rss_kib": "8056640",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5067.94,
+          "rss_kib": "8074688",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5067.94,
+          "rss_kib": "8203264",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5067.94,
+          "rss_kib": "8502080",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5242.5,
+          "rss_kib": "8325072",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5357.44,
+          "rss_kib": "8095712",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5341.44,
+          "rss_kib": "8026064",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5325.44,
+          "rss_kib": "8006960",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5317.44,
+          "rss_kib": "8041184",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5261.44,
+          "rss_kib": "8006464",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5271.69,
+          "rss_kib": "8040320",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5271.69,
+          "rss_kib": "8039936",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5263.69,
+          "rss_kib": "8039856",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5263.69,
+          "rss_kib": "8099904",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5263.69,
+          "rss_kib": "8098272",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5267.38,
+          "rss_kib": "8090032",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5295.06,
+          "rss_kib": "8072928",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5353.31,
+          "rss_kib": "8280304",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5606.88,
+          "rss_kib": "8501776",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5715.38,
+          "rss_kib": "8304144",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5790.19,
+          "rss_kib": "8188608",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5750.19,
+          "rss_kib": "8083648",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5742.19,
+          "rss_kib": "8100608",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5718.19,
+          "rss_kib": "8048224",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5670.19,
+          "rss_kib": "8047904",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5670.19,
+          "rss_kib": "8048448",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5670.19,
+          "rss_kib": "8047856",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5670.19,
+          "rss_kib": "8060144",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5670.19,
+          "rss_kib": "8110768",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5670.19,
+          "rss_kib": "8088992",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5654.19,
+          "rss_kib": "8131536",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5714.56,
+          "rss_kib": "8208128",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5714.56,
+          "rss_kib": "8293744",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5922.5,
+          "rss_kib": "8426736",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5906.0,
+          "rss_kib": "8102240",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5924.56,
+          "rss_kib": "8054032",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5925.5,
+          "rss_kib": "8012304",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5925.5,
+          "rss_kib": "8046928",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5924.94,
+          "rss_kib": "8046384",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5945.56,
+          "rss_kib": "8046656",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5997.12,
+          "rss_kib": "8045408",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5983.5,
+          "rss_kib": "8023792",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5981.44,
+          "rss_kib": "8150816",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5981.62,
+          "rss_kib": "8092224",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5973.62,
+          "rss_kib": "8092176",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5973.62,
+          "rss_kib": "8147792",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6080.06,
+          "rss_kib": "8517568",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6419.81,
+          "rss_kib": "8714992",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6525.81,
+          "rss_kib": "8273584",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6509.81,
+          "rss_kib": "8199840",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6485.81,
+          "rss_kib": "8070992",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        }
+      ],
+      "median_total_ms": 14477.81489550107,
+      "scenarios": {
+        "cold": {
+          "total_ms": 26995.007958001224,
+          "ttft_ms": 25277.34212500218,
+          "prompt_tps": 94.52760925728832,
+          "generation_tps": 8.593895469584773,
+          "cache_n": 0
+        },
+        "growing": {
+          "total_ms": 2492.501041997457,
+          "ttft_ms": 903.0534170015017,
+          "prompt_tps": 46.64179104477612,
+          "generation_tps": 8.8147664968355,
+          "cache_n": 2341
+        },
+        "branch": {
+          "total_ms": 27093.50083299796,
+          "ttft_ms": 25363.98041600478,
+          "prompt_tps": 93.35823685616137,
+          "generation_tps": 8.601159092199264,
+          "cache_n": 0
+        },
+        "return": {
+          "total_ms": 2802.7372500073398,
+          "ttft_ms": 1086.6243330092402,
+          "prompt_tps": 48.13992672033376,
+          "generation_tps": 8.742619043872212,
+          "cache_n": 2377
+        }
+      }
+    },
+    {
+      "variant": "cache-1024",
+      "argv": [
+        "llama-server",
+        "-m",
+        "/Users/jorden/models/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf",
+        "--alias",
+        "benchmark",
+        "-c",
+        "65536",
+        "-fa",
+        "on",
+        "-ngl",
+        "99",
+        "-np",
+        "1",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "--cache-ram",
+        "1024",
+        "--ctx-checkpoints",
+        "8",
+        "--temp",
+        "0.7",
+        "--top-p",
+        "0.8",
+        "--top-k",
+        "20",
+        "--min-p",
+        "0",
+        "--presence-penalty",
+        "1.5",
+        "--chat-template-kwargs",
+        "{\"enable_thinking\":false}",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "52764",
+        "--jinja",
+        "--metrics",
+        "--verbosity",
+        "5"
+      ],
+      "tool_call_ok": true,
+      "swap_growth_mib": 152.25,
+      "memory_samples": [
+        {
+          "swap_used_mib": 6453.81,
+          "rss_kib": "8163856",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 26%"
+        },
+        {
+          "swap_used_mib": 6437.81,
+          "rss_kib": "8251616",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 26%"
+        },
+        {
+          "swap_used_mib": 6357.81,
+          "rss_kib": "8277056",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 26%"
+        },
+        {
+          "swap_used_mib": 6349.81,
+          "rss_kib": "8277056",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 6341.81,
+          "rss_kib": "8278128",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 6341.81,
+          "rss_kib": "8278112",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 6341.81,
+          "rss_kib": "8278112",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 6333.81,
+          "rss_kib": "8278624",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 27%"
+        },
+        {
+          "swap_used_mib": 6325.81,
+          "rss_kib": "8278624",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 28%"
+        },
+        {
+          "swap_used_mib": 6317.81,
+          "rss_kib": "8330160",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 28%"
+        },
+        {
+          "swap_used_mib": 6317.81,
+          "rss_kib": "8382672",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 28%"
+        },
+        {
+          "swap_used_mib": 6285.81,
+          "rss_kib": "8382672",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 28%"
+        },
+        {
+          "swap_used_mib": 6181.81,
+          "rss_kib": "8285040",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 26%"
+        },
+        {
+          "swap_used_mib": 6101.81,
+          "rss_kib": "8336656",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 23%"
+        },
+        {
+          "swap_used_mib": 6069.81,
+          "rss_kib": "8375088",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 22%"
+        },
+        {
+          "swap_used_mib": 6053.81,
+          "rss_kib": "8566368",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 20%"
+        },
+        {
+          "swap_used_mib": 6037.81,
+          "rss_kib": "8361472",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 18%"
+        },
+        {
+          "swap_used_mib": 6037.81,
+          "rss_kib": "8085440",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 16%"
+        },
+        {
+          "swap_used_mib": 5989.81,
+          "rss_kib": "8012816",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5957.81,
+          "rss_kib": "8045296",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 5917.81,
+          "rss_kib": "8043584",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5861.81,
+          "rss_kib": "8008928",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 5857.0,
+          "rss_kib": "8043632",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5836.62,
+          "rss_kib": "8007616",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5909.88,
+          "rss_kib": "8007328",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5881.75,
+          "rss_kib": "8149728",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5891.69,
+          "rss_kib": "8009616",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5883.69,
+          "rss_kib": "8048256",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5922.81,
+          "rss_kib": "8074304",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 5913.75,
+          "rss_kib": "8456816",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6084.44,
+          "rss_kib": "8377760",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6148.38,
+          "rss_kib": "8244064",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6267.88,
+          "rss_kib": "8102304",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6314.81,
+          "rss_kib": "8101392",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6258.81,
+          "rss_kib": "8100528",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6242.81,
+          "rss_kib": "8046560",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6202.81,
+          "rss_kib": "8012640",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6170.81,
+          "rss_kib": "8045792",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6148.81,
+          "rss_kib": "8010608",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6174.69,
+          "rss_kib": "8010608",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6282.0,
+          "rss_kib": "8107648",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6283.31,
+          "rss_kib": "8008080",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6256.25,
+          "rss_kib": "8007168",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6248.25,
+          "rss_kib": "8072736",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6284.19,
+          "rss_kib": "8194768",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6391.5,
+          "rss_kib": "8369168",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6545.31,
+          "rss_kib": "8208576",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6606.06,
+          "rss_kib": "8102576",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6598.06,
+          "rss_kib": "8100752",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6598.06,
+          "rss_kib": "8099328",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6590.06,
+          "rss_kib": "8047808",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6574.06,
+          "rss_kib": "8047152",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6574.06,
+          "rss_kib": "8042960",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6558.06,
+          "rss_kib": "8046112",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6564.62,
+          "rss_kib": "8011504",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6532.62,
+          "rss_kib": "8010704",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6524.62,
+          "rss_kib": "8150720",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6524.62,
+          "rss_kib": "8032960",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6492.62,
+          "rss_kib": "8011520",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6460.62,
+          "rss_kib": "8077184",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6444.62,
+          "rss_kib": "8663616",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 18%"
+        },
+        {
+          "swap_used_mib": 6428.62,
+          "rss_kib": "8809728",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 18%"
+        },
+        {
+          "swap_used_mib": 6404.62,
+          "rss_kib": "8322528",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6457.88,
+          "rss_kib": "8179552",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 16%"
+        },
+        {
+          "swap_used_mib": 6441.88,
+          "rss_kib": "8097200",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 17%"
+        },
+        {
+          "swap_used_mib": 6385.88,
+          "rss_kib": "8026576",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6361.88,
+          "rss_kib": "8043360",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6353.88,
+          "rss_kib": "8042640",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6297.88,
+          "rss_kib": "8005072",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6283.88,
+          "rss_kib": "8011152",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6323.12,
+          "rss_kib": "8089568",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6315.12,
+          "rss_kib": "8017648",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6259.12,
+          "rss_kib": "8061008",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6279.31,
+          "rss_kib": "8072512",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6387.56,
+          "rss_kib": "8139392",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6393.44,
+          "rss_kib": "8698656",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 16%"
+        },
+        {
+          "swap_used_mib": 6385.81,
+          "rss_kib": "8314240",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6500.88,
+          "rss_kib": "8096992",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6536.31,
+          "rss_kib": "8011888",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6507.25,
+          "rss_kib": "8006864",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6467.25,
+          "rss_kib": "8039632",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6411.25,
+          "rss_kib": "8039264",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6363.25,
+          "rss_kib": "8005216",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6347.25,
+          "rss_kib": "8039376",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6323.25,
+          "rss_kib": "8005376",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6307.25,
+          "rss_kib": "8005200",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6332.19,
+          "rss_kib": "8145200",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6333.56,
+          "rss_kib": "8095200",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 14%"
+        },
+        {
+          "swap_used_mib": 6333.56,
+          "rss_kib": "8067216",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6327.06,
+          "rss_kib": "8153536",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 13%"
+        },
+        {
+          "swap_used_mib": 6303.06,
+          "rss_kib": "8663248",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 16%"
+        },
+        {
+          "swap_used_mib": 6295.06,
+          "rss_kib": "8971984",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 17%"
+        },
+        {
+          "swap_used_mib": 6295.06,
+          "rss_kib": "8399680",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 15%"
+        },
+        {
+          "swap_used_mib": 6295.06,
+          "rss_kib": "8403920",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 16%"
+        },
+        {
+          "swap_used_mib": 6279.06,
+          "rss_kib": "8404016",
+          "pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 16%"
+        }
+      ],
+      "median_total_ms": 14772.74802049942,
+      "scenarios": {
+        "cold": {
+          "total_ms": 30489.227457990637,
+          "ttft_ms": 28543.402791998233,
+          "prompt_tps": 84.19200199676861,
+          "generation_tps": 7.406028606032359,
+          "cache_n": 0
+        },
+        "growing": {
+          "total_ms": 3164.444583002478,
+          "ttft_ms": 1131.0684999916703,
+          "prompt_tps": 39.8816710819,
+          "generation_tps": 7.0982072463569725,
+          "cache_n": 2341
+        },
+        "branch": {
+          "total_ms": 30628.79604099726,
+          "ttft_ms": 28382.975000000442,
+          "prompt_tps": 83.88788456050308,
+          "generation_tps": 7.5475191807620785,
+          "cache_n": 0
+        },
+        "return": {
+          "total_ms": 3196.230415996979,
+          "ttft_ms": 1352.8247909998754,
+          "prompt_tps": 45.46246694499799,
+          "generation_tps": 8.141077270763546,
+          "cache_n": 2377
+        }
+      }
+    }
+  ]
+}

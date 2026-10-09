@@ -12,7 +12,8 @@ cd local-coding-agent-setup
 ./setup.sh
 ```
 
-Then in one terminal `llama-coder`, in another `qwen-local` inside your project.
+Then in one terminal `llama-coder`, in another `qwen-local` inside your project. `lca` (no
+arguments) opens a small terminal UI for settings and response times; `lca doctor` checks the install.
 
 ## What it installs
 
@@ -21,6 +22,11 @@ Then in one terminal `llama-coder`, in another `qwen-local` inside your project.
 | llama.cpp | Homebrew formula `llama.cpp` |
 | hf (HuggingFace CLI) | Homebrew formula `hf` |
 | Qwen Code | Homebrew formula `qwen-code` (skipped if already installed) |
+| Go | Homebrew formula `go` (skipped if already installed); builds `lca` |
+| `~/.local/bin/llama-coder` | launcher for llama-server, copied from `launchers/llama-coder` |
+| `~/.local/bin/qwen-local` | launcher for Qwen Code, copied from `launchers/qwen-local` |
+| `~/.local/bin/lca` | Go tool built from `cmd/lca`: config editor, Qwen sync, response-time stats |
+| `~/.config/llama-coder/config.env` | model, context, port and sampling settings; written once, never overwritten |
 | Model (32 GB+) | `unsloth/Qwen3.6-35B-A3B-GGUF`, file `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (22.4 GB) into `~/models` |
 | Model (16 GB) | `unsloth/Qwen3.5-9B-GGUF`, file `Qwen3.5-9B-UD-Q4_K_XL.gguf` (6.0 GB) into `~/models` |
 
@@ -97,7 +103,172 @@ ALIAS=qwen3.8-27b ./setup.sh
 Qwen3.8-27B is dense and scores higher (SWE-bench Pro 61.7 vs 49.5) but generates
 several times slower on Apple Silicon. It does not fit a 16 GB machine.
 
+## Configure without re-running setup.sh
+
+The launchers read `~/.config/llama-coder/config.env` (or `$XDG_CONFIG_HOME/llama-coder/config.env`)
+every time they start. setup.sh seeds it once from the memory profile and never touches it again, so
+`CTX=65536 ./setup.sh` only matters on the first run. After that:
+
+```bash
+lca config show                      # every key and its value
+lca config set CTX 65536             # validated; ALIAS, PORT and CTX also update ~/.qwen/settings.json
+lca config set EXTRA_ARGS --jinja    # extra llama-server flags
+lca config edit                      # $EDITOR, then validate + sync
+lca                                  # the same as a form in the terminal UI (tab 2)
+CTX=32768 llama-coder                # one-off override; PORT works the same way for both launchers
+```
+
+| Key | llama-server flag | Default | Notes |
+|---|---|---|---|
+| `MODEL_PATH` | `-m` | from the memory profile | absolute path to an existing `.gguf` |
+| `ALIAS` | `--alias` | `qwen3.5-9b` / `qwen3.6-35b-a3b` | also the Qwen Code provider id and `OPENAI_MODEL` |
+| `CTX` | `-c` | `65536` / `131072` | 2048 to 1048576, multiple of 256; mirrored to Qwen's `contextWindowSize` |
+| `PORT` | `--port` | `8080` | both launchers must use the same port |
+| `TEMP` | `--temp` | `0.7` | Unsloth non-thinking recommendation for Qwen3.5/3.6 |
+| `TOP_P` | `--top-p` | `0.8` | |
+| `TOP_K` | `--top-k` | `20` | |
+| `MIN_P` | `--min-p` | `0.0` | |
+| `PRESENCE_PENALTY` | `--presence-penalty` | `1.5` | |
+| `THINKING` | `--chat-template-kwargs` | `false` | `true` enables reasoning; slower agent turns |
+| `CACHE_RAM` | `--cache-ram` | `8192` | host prompt-cache limit in MiB, 0 disables it; range 0–1048576 |
+| `CTX_CHECKPOINTS` | `--ctx-checkpoints` | `32` | recurrent/window state checkpoints per slot; range 0–1024 |
+| `EXTRA_ARGS` | appended | empty | whitespace-separated, no quoting; flags the keys above own are rejected |
+
+Restart rules: every key needs a restart of `llama-coder`. `ALIAS`, `PORT` and `CTX` also need a
+restart of `qwen-local`, because Qwen Code reads `modelProviders` at startup. `lca config set`
+prints the hint. setup.sh and `lca sync` write one entry in `~/.qwen/settings.json` under
+`modelProviders.openai[]` with `id` = `ALIAS`, `baseUrl` = `http://127.0.0.1:PORT/v1`,
+`envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize` = `CTX`; every other key in
+that file is left alone. `lca doctor` reports when the entry drifts from config.env.
+If an older config has cache/checkpoint flags in `EXTRA_ARGS`, move their values into
+`CACHE_RAM` / `CTX_CHECKPOINTS` and remove those flags from `EXTRA_ARGS`. The launcher rejects
+duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints`, and `--flag=value` forms.
+
+## Response times
+
+Two sources are captured, and `lca stats` shows both as one table per source (p50, p95, mean,
+token counts per day and model) plus a sparkline of the daily p50. `lca stats --raw` lists every
+request, `--json` is for scripts, `--source qwen|server`, `--days N` and `--model ALIAS` filter.
+The terminal UI (`lca`, tab 1) shows the same table and, while the server runs, a live line from
+its `/metrics` endpoint every two seconds (`lca metrics` prints one scrape).
+
+- **Qwen Code** writes one JSON line per API call to `~/.qwen/usage/token-usage-YYYY-MM.jsonl`
+  with `apiDurationMs`, input/output tokens, model and caller (`main` or a subagent). This is the
+  end-to-end time an agent turn waits for. It is on unless `privacy.usageStatisticsEnabled` is false
+  in `~/.qwen/settings.json`; `lca doctor` warns if it is.
+- **llama-server** logs `prompt eval time`, `eval time` and `total time` with tokens per second
+  for every request. `llama-coder` passes `--log-file --log-timestamps --metrics`, writing one
+  log per launch to `~/.local/state/llama-coder/server-<UTC time>-<ALIAS>.log`. The timestamps are
+  relative to process start, so the file name supplies the wall clock. On each launch (and on every
+  `lca stats`) the previous logs are folded into `timings.jsonl` in the same directory and logs
+  older than 14 days are deleted, except the newest.
+
+Qwen's output tokens divided by API duration includes prompt processing and queue time; it is
+not a measurement of generation speed. Use server timings to separate those costs.
+
+## Lean Qwen Code profile (opt-in)
+
+```bash
+lca qwen-profile lean
+# Restart qwen-local; the profile applies to new Qwen Code sessions.
+lca qwen-profile restore
+```
+
+Lean disables automatic memory extraction, dreaming, automatic skill review, workflows, and
+the `agent` subagent tool. File reading, searching, editing and shell tools remain eager; other
+tools remain discoverable through `tool_search` and `tool_call`. Manual memory commands remain
+available. This reduces background requests and avoids switching a single server slot between
+agent prompts. Normal provider sync does not select a profile.
+
+Only affected settings are saved in `~/.qwen/settings.json.lca-lean.json`, before the settings
+file is changed. Existing disabled tools and unrelated settings are preserved. Reapplying lean
+is idempotent. Restore merges only the saved settings, preserving provider and unrelated edits;
+it refuses to overwrite edits made to profile settings while lean was active and keeps the
+snapshot so the conflict can be resolved. Compare JSON values in the snapshot's `applied`
+fields with the named conflicting settings, restore those applied values, then retry restore.
+Do not edit the snapshot. A snapshot is retained if settings writing fails, and retry recovers.
+
+Settings were verified against Qwen Code 0.25.0's installed tool names and its
+[settings reference](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/settings/).
+On the disposable M1 coding fixture, lean reduced median session time from 343 to 182 seconds
+(47%), with all six sessions passing shell, discovery and correctness checks. This is a small-task
+measurement; M4 and long-task results remain pending. See the [measured report](docs/performance/2026-10-08.md).
+
+## Update tools without downloading models
+
+```bash
+./tools/install-tools.sh
+```
+
+This builds `lca`, installs both launchers, and syncs the Qwen provider. It does not install or
+upgrade packages, download models, or start/restart a server. Existing config.env is preserved.
+If absent (as with the old static launcher), it seeds config.env from the downloaded model for
+the detected memory profile. Override `MODEL_PATH`, `ALIAS`, `CTX`, and `PORT` for a custom model.
+Go, Python 3 and ripgrep must already be available. Then start `llama-coder` and `qwen-local`.
+
+## Measure before selecting performance defaults
+
+```bash
+python3 tools/benchmark.py \
+  --model "$HOME/models/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf" \
+  --profile m1 --output /tmp/lca-bench-m1
+```
+
+For the M4 Pro, use its Qwen3.6-35B-A3B model path and `--profile m4`. The output directory must
+not exist. Run outside a sandbox that blocks Metal; the runner verifies full GPU offload. It
+launches one isolated localhost server at a time on a free port and stops only its own child
+processes. Installed launchers and settings are untouched. Allow approximately 15 minutes for
+the M1 matrix with the default 2048-token fixture; larger `--prompt-tokens` take longer.
+
+The matrix compares baseline cache/checkpoints (8192 MiB / 32), 0 MiB / 8, 0 MiB / 32,
+1024 MiB / 8 (a bounded-cache experiment that retains caching), and
+physical batch sizes 256 and 1024 against baseline 512. The M4 adds 2048 MiB host cache with
+unified KV. Logical batch size is 2048 throughout. Each variant repeats cold, growing,
+subagent-like branch, and return-to-main requests three times, then verifies a structured
+`read_file` tool call without executing tools. Requests use temperature 0 and seed 42 to reduce
+sampling noise; production sampling stays unchanged. Use `--variants baseline bounded-8` for
+a subset and `--prompt-tokens 8192` or `16384` for longer contexts.
+
+`requests.jsonl` records time to first token, total duration, prompt and generation timings,
+and cached tokens. `summary.json` includes medians, exact arguments, model/runtime information,
+RSS, memory pressure snapshots, swap growth, and the tool-call check. Compare a candidate only
+against a baseline from the same run and machine. Adopt a changed default only for at least
+10% lower median request duration, successful tool calls, and no greater swap growth. Also
+check the per-scenario medians for cache regressions; combining improvements requires another
+run. An 8 GiB cache limit is a ceiling, not an immediate 8 GiB allocation.
+
+The installed build 11429 uses `--checkpoint-min-step` (8192 tokens by default); older advice
+using `--checkpoint-every-n-tokens` does not apply. Disabling the host prompt cache does not
+disable active-slot prefix reuse, but can affect returning to an earlier branch. Flag meanings
+are from the [matching llama.cpp server reference](https://github.com/ggml-org/llama.cpp/blob/d81235049/tools/server/README.md).
+
+Measured results: [local performance report](docs/performance/2026-10-08.md).
+
+For a normal-versus-lean coding comparison, build `lca`, start an isolated server on a different
+port (for example 8081), and run:
+
+```bash
+go build -o /tmp/lca-benchmark ./cmd/lca
+python3 tools/benchmark_qwen.py --base-url http://127.0.0.1:8081 \
+  --alias qwen3.5-9b --ctx 65536 --lca /tmp/lca-benchmark \
+  --output /tmp/lca-qwen-bench
+```
+
+The runner alternates normal/lean sessions three times, using temporary HOME/XDG directories
+and disposable coding projects. Each session fixes an addition function, creates three tests,
+and runs them. File edits are auto-approved in those fixtures; only the specific unittest shell
+command is explicitly allowed. A fixture-only core-tool allowlist registers shell execution
+in Qwen’s headless mode; normal user permissions and core-tool settings are untouched.
+Model calls use the supplied local OpenAI-compatible endpoint. Logs, usage sources, resulting
+fixtures, recorded shell/discovery calls, and independent behaviour/test checks are retained
+in the output directory. It never changes the user's Qwen settings. A fresh short headless session
+may not trigger background memory extraction, so report observed sources rather than assuming
+every normal session incurs that work. Allow up to 15 minutes per session on the M1; the runner
+stops a session at that limit. Do not run two model servers concurrently on the 16 GB Mac.
+
 ## Mac-specific choices in the launcher
+
+The server flags live in `launchers/llama-coder`, installed verbatim to `~/.local/bin/llama-coder`.
 
 - No `--cache-type-k/v` (quantised KV cache). Not optimised for Metal per the llama.cpp
   maintainer in [issue #23011](https://github.com/ggml-org/llama.cpp/issues/23011).
@@ -105,11 +276,12 @@ several times slower on Apple Silicon. It does not fit a 16 GB machine.
 
 ## Tuning
 
-- On 32 GB+ with memory pressure: `CTX=65536 llama-coder` (already the default on 16 GB)
-- Compaction triggers early? Qwen Code sizes its context from its own
+- On 32 GB+ with memory pressure: `lca config set CTX 65536` (already the default on 16 GB), or
+  `CTX=65536 llama-coder` for one run
+- Compaction triggers early? Qwen Code sizes its context from
   `modelProviders.openai[].generationConfig.contextWindowSize` in `~/.qwen/settings.json`.
-  Set it to match `CTX`. The script does not write that file.
-- Tool calls failing? Add `--jinja` to the `llama-server` line in `~/.local/bin/llama-coder`. Recent
-  llama.cpp builds enable it by default; harness-bench passed it explicitly.
+  setup.sh and `lca config set CTX` keep it equal to `CTX`; `lca doctor` reports drift, `lca sync` fixes it.
+- Tool calls failing? `lca config set EXTRA_ARGS --jinja`. Recent llama.cpp builds enable it by
+  default; harness-bench passed it explicitly.
 - Previously used `claude-local`? setup.sh no longer writes it; delete `~/.local/bin/claude-local` by hand.
 - Measure speed: `llama-bench -m ~/models/<repo>/<file>.gguf -ngl 99 -p 512 -n 128` (setup.sh prints the exact path at the end)
