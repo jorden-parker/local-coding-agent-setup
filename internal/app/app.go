@@ -180,7 +180,7 @@ func Doctor() []Check {
 		if err := qwen.CheckLocal(paths.QwenSettings(), want); err != nil {
 			add("qwen local profile", false, err.Error()+"; run lca sync")
 		} else {
-			add("qwen local profile", true, "lean, openai, "+want.ID+" in "+paths.Tildify(paths.QwenSettings()))
+			add("qwen local profile", true, "lean, openai, "+want.ID+", skills ~/.qwen/skills in "+paths.Tildify(paths.QwenSettings()))
 		}
 	}
 	if on, err := qwen.UsageStatsEnabled(paths.QwenSettings()); err != nil {

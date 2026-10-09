@@ -5,8 +5,16 @@ import (
 	"fmt"
 )
 
-// PrepareLocal owns model selection and lean defaults in the dedicated local
-// configuration. Unlike ApplyLean, it needs no restoration snapshot.
+// localSkillsDir is added to skills.directories so qwen-local offers the same
+// user skills as ordinary qwen, whose default skill directory this is. Qwen
+// Code (0.21+) expands "~" itself; keeping the tilde makes settings.json
+// portable across HOMEs. The default $QWEN_HOME/skills stays first and Qwen
+// deduplicates skill names, so this never shadows a locally installed skill.
+const localSkillsDir = "~/.qwen/skills"
+
+// PrepareLocal owns model selection, lean defaults and the shared skills
+// directory in the dedicated local configuration. Unlike ApplyLean, it needs
+// no restoration snapshot.
 func PrepareLocal(path string, p Provider) (bool, error) {
 	m, _, err := loadSettings(path)
 	if err != nil {
@@ -77,9 +85,39 @@ func prepareLocal(m map[string]any, p Provider) error {
 	for path, value := range values {
 		putState(m, path, settingState{Present: true, Value: value})
 	}
+	if err := addSkillsDir(m, localSkillsDir); err != nil {
+		return err
+	}
 
 	model["name"] = p.ID
 	auth["selectedType"] = "openai"
 	mergeProvider(m, p)
+	return nil
+}
+
+// addSkillsDir appends dir to skills.directories unless already listed,
+// keeping existing entries and their order.
+func addSkillsDir(m map[string]any, dir string) error {
+	skills, err := settingsObject(m, "skills")
+	if err != nil {
+		return err
+	}
+	var list []any
+	if value, exists := skills["directories"]; exists {
+		var ok bool
+		if list, ok = value.([]any); !ok {
+			return fmt.Errorf("settings.skills.directories must be an array")
+		}
+	}
+	for _, entry := range list {
+		s, ok := entry.(string)
+		if !ok {
+			return fmt.Errorf("settings.skills.directories entries must be strings")
+		}
+		if s == dir {
+			return nil
+		}
+	}
+	skills["directories"] = append(append([]any{}, list...), dir)
 	return nil
 }

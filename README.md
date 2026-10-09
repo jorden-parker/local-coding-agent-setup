@@ -142,7 +142,10 @@ prints the hint. setup.sh, `lca sync`, and every `qwen-local` launch prepare
 provider entry is under `modelProviders.openai[]` with `id` = `ALIAS`, `baseUrl` =
 `http://127.0.0.1:PORT/v1`, `envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize`
 = `CTX`. Preparation also selects the local model, OpenAI authentication, and lean defaults,
-preserving unrelated settings. `qwen-local` sets `QWEN_HOME` to this dedicated directory and
+preserving unrelated settings, and adds `~/.qwen/skills` to `skills.directories` (Qwen Code
+0.21+) so `qwen-local` offers the same user skills as ordinary `qwen`, including anything
+linked there from `~/.agents/skills`; existing entries in that list are kept, and the lean
+profile for ordinary `qwen` never touches it. `qwen-local` sets `QWEN_HOME` to this dedicated directory and
 passes explicit model, auth, base URL, and API key flags, so saved choices from ordinary `qwen`
 cannot select another model. Model/auth/endpoint flags passed to `qwen-local` are rejected;
 change `ALIAS` or `PORT` through `lca config set`. `lca doctor` reports provider or lean-setting
