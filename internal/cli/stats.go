@@ -45,7 +45,7 @@ func statsCmd() *cobra.Command {
 				return nil
 			}
 			if src != app.SourceServer {
-				fmt.Printf("Qwen Code API calls (apiDurationMs), last %d days, from %s\n", days, paths.Tildify(paths.QwenUsageDir())+" and "+paths.Tildify(paths.LegacyQwenUsageDir()))
+				fmt.Printf("Qwen Code API calls (apiDurationMs), last %d days, from %s\n", days, app.UsageSources())
 				printBuckets(s.Qwen, false)
 				if s.Skipped > 0 {
 					fmt.Printf("(%d malformed or unsupported lines skipped)\n", s.Skipped)

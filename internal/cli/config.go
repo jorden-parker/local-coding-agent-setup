@@ -145,7 +145,7 @@ func showConfig() error {
 }
 
 func syncCmd() *cobra.Command {
-	var port string
+	var port, ctx string
 	c := &cobra.Command{
 		Use:   "sync",
 		Short: "Prepare the local Qwen model, provider and lean settings",
@@ -157,9 +157,14 @@ func syncCmd() *cobra.Command {
 			}
 			cfgPort, _ := f.Get("PORT")
 			activePort := cfgPort
+			// Runtime overrides only; config.env is not saved. qwen-local
+			// passes the PORT= and CTX= it launched with.
 			if cmd.Flags().Changed("port") {
-				f.Set("PORT", port) // Runtime override only; config.env is not saved.
+				f.Set("PORT", port)
 				activePort = port
+			}
+			if cmd.Flags().Changed("ctx") {
+				f.Set("CTX", ctx)
 			}
 			p, changed, settingsPath, err := app.SyncQwenAt(f, activePort, cfgPort)
 			if err != nil {
@@ -174,5 +179,6 @@ func syncCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&port, "port", "", "Use this server port without changing config.env")
+	c.Flags().StringVar(&ctx, "ctx", "", "Use this context size without changing config.env")
 	return c
 }

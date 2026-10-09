@@ -1,23 +1,42 @@
 #!/usr/bin/env bash
-# Runs Qwen Code against the local llama-server (OpenAI-compatible /v1 API).
-# Installed by setup.sh. Reads ALIAS and PORT from
-# ${XDG_CONFIG_HOME:-~/.config}/llama-coder/config.env; PORT= in the
-# environment overrides the file. Must match the PORT llama-coder used.
-# Uses a dedicated QWEN_HOME and explicitly selects the configured local model.
-# A PORT= override that differs from config.env's own PORT runs as a second,
-# isolated instance: QWEN_HOME moves to a qwen-<port> sibling directory so it
-# never races the default instance's Qwen settings.
+# Runs Qwen Code against a local llama-server (OpenAI-compatible /v1 API),
+# starting one when needed. Installed by setup.sh. Reads ALIAS and PORT from
+# ${XDG_CONFIG_HOME:-~/.config}/llama-coder/config.env.
+#
+# Ports: without PORT= in the environment, the first port from config.env's
+# PORT upward that no other running qwen-local holds is used, so several
+# sessions each get their own llama-server. A server already listening there
+# is used as is (a loading one is waited for); otherwise llama-coder is started
+# in the background and stopped again when this session ends. PORT= pins the
+# port: same rules, except that a port another live qwen-local holds is shared.
+# A server the user started with llama-coder is never stopped. CTX= passes
+# through to a server started here. QWEN_LOCAL_START_TIMEOUT (seconds, default
+# 600) bounds the wait for the model to load.
+#
+# Each session holds ${XDG_STATE_HOME:-~/.local/state}/llama-coder/instances/
+# <port>/ with owner.pid, server.pid (only when it started the server, or
+# adopted one a crashed session left behind), launcher.log (that server's
+# console output) and sharers/<pid>. A port other than config.env's own moves
+# QWEN_HOME to a qwen-<port> sibling directory so sessions never race on Qwen
+# settings.
 set -eo pipefail
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder/config.env"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/llama-coder"
+INSTANCES="$STATE/instances"
 [[ -f "$CONFIG" ]] || { echo "Missing $CONFIG. Run setup.sh first." >&2; exit 1; }
 
 env_port="${PORT:-}"
+env_ctx="${CTX:-}"
 # shellcheck source=/dev/null
 source "$CONFIG"
 cfg_port="${PORT:-}"
-[[ -n "$env_port" ]] && PORT="$env_port"
-[[ -n "${ALIAS:-}" && -n "${PORT:-}" ]] || { echo "ALIAS and PORT must be set in $CONFIG" >&2; exit 1; }
+[[ -n "$env_ctx" ]] && CTX="$env_ctx"
+[[ -n "${ALIAS:-}" && -n "$cfg_port" ]] || { echo "ALIAS and PORT must be set in $CONFIG" >&2; exit 1; }
+[[ "$cfg_port" =~ ^[0-9]+$ ]] || { echo "PORT in $CONFIG must be a number, not '$cfg_port'" >&2; exit 1; }
+[[ -z "$env_port" || "$env_port" =~ ^[0-9]+$ ]] || { echo "PORT must be a number, not '$env_port'" >&2; exit 1; }
+timeout="${QWEN_LOCAL_START_TIMEOUT:-600}"
+[[ "$timeout" =~ ^[0-9]+$ ]] || { echo "QWEN_LOCAL_START_TIMEOUT must be a number of seconds" >&2; exit 1; }
 
 # These settings belong to config.env. Do not let forwarded flags undo them.
 for arg in "$@"; do
@@ -31,17 +50,197 @@ for arg in "$@"; do
 done
 command -v lca >/dev/null 2>&1 || { echo "lca is missing. Run tools/install-tools.sh first." >&2; exit 1; }
 
-if ! curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
-  echo "llama-server is not running on port ${PORT}. Start it with: llama-coder" >&2
-  exit 1
+claim=""       # instances/<port> this session owns, if any
+server_pid=""  # llama-server this session started or adopted, if any
+inherited=""   # set when server_pid was adopted from a crashed session
+sharer=""      # instances/<port>/sharers/<pid> marker when sharing a pinned port
+
+# HTTP status of /health: 000 nothing listening, 503 llama-server still
+# loading, 200 ready, anything else is not llama-server.
+probe() {
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 1 --max-time 2 "http://127.0.0.1:$1/health" 2>/dev/null) || true
+  printf '%s' "${code:-000}"
+}
+
+pid_alive() { [[ -n "$1" ]] && kill -0 "$1" 2>/dev/null; }
+
+is_llama_server() { [[ "$(ps -o comm= -p "$1" 2>/dev/null)" == *llama-server ]]; }
+
+# True when the qwen-local recorded in $1/owner.pid is still running.
+claim_live() {
+  local pid
+  pid=$(cat "$1/owner.pid" 2>/dev/null) || true
+  if pid_alive "$pid"; then return 0; fi
+  return 1
+}
+
+# Claim port $1 for this session. The pid is written to a temporary file that
+# is hard-linked into place, so the link either exists with its owner inside
+# or not at all: concurrent sessions can never both win. A dead owner's claim
+# is cleared first; a server it left running is adopted and stopped at exit.
+# Returns 1 when a live session holds the port.
+try_claim() {
+  local dir="$INSTANCES/$1" tmp="$INSTANCES/.owner-$$" old
+  mkdir -p "$dir"
+  echo "$$" >"$tmp"
+  if [[ -e "$dir/owner.pid" ]] && ! claim_live "$dir"; then
+    rm -f "$dir/owner.pid"
+    old=$(cat "$dir/server.pid" 2>/dev/null) || true
+    if pid_alive "$old" && is_llama_server "$old"; then
+      inherited="$old"
+    else
+      rm -f "$dir/server.pid"
+    fi
+  fi
+  if ln "$tmp" "$dir/owner.pid" 2>/dev/null; then
+    rm -f "$tmp"
+    claim="$dir"
+    [[ -n "$inherited" ]] && server_pid="$inherited"
+    return 0
+  fi
+  rm -f "$tmp"
+  inherited=""
+  return 1
+}
+
+release_claim() {
+  [[ -n "$claim" ]] || return 0
+  rm -rf "$claim"
+  claim=""
+}
+
+# Start llama-coder for port $1 in the background. It execs llama-server, so
+# $! is the server's pid. Console output goes to launcher.log; the server's
+# own --log-file in $STATE is unchanged.
+start_server() {
+  command -v llama-coder >/dev/null 2>&1 || { echo "llama-coder is missing. Run setup.sh first." >&2; exit 1; }
+  PORT="$1" llama-coder </dev/null >"$claim/launcher.log" 2>&1 &
+  server_pid=$!
+  # Out of the job table, so stopping it at exit prints no "Terminated" notice.
+  disown "$server_pid" 2>/dev/null || true
+  echo "$server_pid" >"$claim/server.pid"
+}
+
+# Poll /health on port $1 until it answers 200. Gives up when the server this
+# session started exits, when something other than llama-server answers, or
+# after $timeout seconds.
+wait_ready() {
+  local code waited=0
+  while :; do
+    code=$(probe "$1")
+    case "$code" in
+      200) return 0 ;;
+      000|503) ;;
+      *)
+        echo "port $1 answers HTTP $code on /health; something other than llama-server is using it" >&2
+        exit 1
+        ;;
+    esac
+    if [[ -n "$server_pid" && -z "$inherited" ]] && ! pid_alive "$server_pid"; then
+      echo "llama-server on port $1 exited before it was ready. Last lines of $claim/launcher.log:" >&2
+      tail -n 20 "$claim/launcher.log" >&2 || true
+      exit 1
+    fi
+    if [[ "$waited" -ge "$timeout" ]]; then
+      echo "llama-server on port $1 was not ready after ${timeout}s (QWEN_LOCAL_START_TIMEOUT)" >&2
+      exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
+# Runs on every exit, including fatal signals. Stops the server this session
+# started unless another live qwen-local shares it, then drops the claim.
+# shellcheck disable=SC2317,SC2329
+cleanup() {
+  set +e
+  [[ -n "$sharer" ]] && rm -f "$sharer"
+  if [[ -n "$claim" ]]; then
+    local s
+    for s in "$claim"/sharers/*; do
+      [[ -f "$s" ]] || continue
+      if pid_alive "${s##*/}"; then
+        echo "qwen-local: leaving llama-server on port ${claim##*/} running for qwen-local pid ${s##*/}" >&2
+        return 0
+      fi
+    done
+  fi
+  # Only kill a process that is still our child (bash reaps background
+  # children as they exit, so a bare pid could belong to someone else by now)
+  # or an adopted one that is still llama-server.
+  if [[ -n "$server_pid" ]]; then
+    local ours=""
+    [[ "$(ps -o ppid= -p "$server_pid" 2>/dev/null | tr -d ' ')" == "$$" ]] && ours=1
+    [[ -n "$inherited" ]] && is_llama_server "$server_pid" && ours=1
+    if [[ -n "$ours" ]]; then
+      kill -TERM "$server_pid" 2>/dev/null
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        pid_alive "$server_pid" || break
+        sleep 0.5
+      done
+      kill -KILL "$server_pid" 2>/dev/null
+      wait "$server_pid" 2>/dev/null
+    fi
+  fi
+  release_claim
+}
+trap cleanup EXIT
+
+mkdir -p "$INSTANCES"
+port=""
+mode=""  # own: this session holds the claim; share: another live session does
+if [[ -n "$env_port" ]]; then
+  port="$env_port"
+  if try_claim "$port"; then
+    mode=own
+  else
+    mkdir -p "$INSTANCES/$port/sharers"
+    sharer="$INSTANCES/$port/sharers/$$"
+    echo "$$" >"$sharer"
+    mode=share
+  fi
+else
+  for ((i = 0; i < 100; i++)); do
+    candidate=$((cfg_port + i))
+    [[ "$candidate" -le 65535 ]] || break
+    try_claim "$candidate" || continue
+    case "$(probe "$candidate")" in
+      200|000|503) port="$candidate"; mode=own; break ;;
+      *) release_claim ;;  # something else lives there; try the next port
+    esac
+  done
+  [[ -n "$port" ]] || { echo "no free port from $cfg_port upward; set PORT= to pin one" >&2; exit 1; }
 fi
+
 qwen_home_dir="$(dirname -- "$CONFIG")/qwen"
-[[ "$PORT" != "$cfg_port" ]] && qwen_home_dir="$(dirname -- "$CONFIG")/qwen-${PORT}"
+[[ "$port" != "$cfg_port" ]] && qwen_home_dir="$(dirname -- "$CONFIG")/qwen-${port}"
 export QWEN_HOME="$qwen_home_dir"
 unset QWEN_CODE_ENABLE_WORKFLOWS QWEN_CODE_DISABLE_WORKFLOWS QWEN_RUNTIME_DIR
-lca sync --port "$PORT" >/dev/null
-export OPENAI_BASE_URL="http://127.0.0.1:${PORT}/v1"
+# A one-off CTX= must reach Qwen's contextWindowSize too, not only the server.
+sync_args=(sync --port "$port")
+[[ -n "$env_ctx" ]] && sync_args+=(--ctx "$env_ctx")
+lca "${sync_args[@]}" >/dev/null
+
+if [[ "$mode" == own && "$(probe "$port")" == 000 ]]; then
+  start_server "$port"
+fi
+wait_ready "$port"
+if [[ -n "$server_pid" && -z "$inherited" ]]; then
+  echo "qwen-local: port $port, started llama-server pid $server_pid: $(head -n 1 "$claim/launcher.log")" >&2
+elif [[ -n "$inherited" ]]; then
+  echo "qwen-local: port $port, adopted llama-server pid $server_pid left by an earlier session; it stops when this one ends" >&2
+elif [[ "$mode" == share ]]; then
+  echo "qwen-local: port $port, sharing the llama-server held by qwen-local pid $(cat "$INSTANCES/$port/owner.pid" 2>/dev/null)" >&2
+else
+  echo "qwen-local: port $port, using the llama-server already running there" >&2
+fi
+
+export OPENAI_BASE_URL="http://127.0.0.1:${port}/v1"
 export OPENAI_API_KEY="local"
 export OPENAI_MODEL="$ALIAS"
-exec qwen --auth-type openai --model "$ALIAS" \
-  --openai-base-url "$OPENAI_BASE_URL" --openai-api-key "$OPENAI_API_KEY" "$@"
+status=0
+qwen --auth-type openai --model "$ALIAS" \
+  --openai-base-url "$OPENAI_BASE_URL" --openai-api-key "$OPENAI_API_KEY" "$@" || status=$?
+exit "$status"

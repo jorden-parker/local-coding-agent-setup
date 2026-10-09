@@ -30,13 +30,14 @@ func TestSyncIsolatesLocalAndPortOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := Root()
-	root.SetArgs([]string{"sync", "--port", "9000"})
+	root.SetArgs([]string{"sync", "--port", "9000", "--ctx", "32768"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
 	// A port that differs from config.env's own PORT is isolated: it must not
-	// touch the shared default settings file.
-	if err := qwen.CheckLocal(paths.QwenSettingsFor("9000", "8080"), qwen.ProviderFor("local", 9000, 65536)); err != nil {
+	// touch the shared default settings file. The one-off CTX reaches Qwen's
+	// contextWindowSize for that instance.
+	if err := qwen.CheckLocal(paths.QwenSettingsFor("9000", "8080"), qwen.ProviderFor("local", 9000, 32768)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(paths.QwenSettings()); !os.IsNotExist(err) {
@@ -57,6 +58,11 @@ func TestSyncIsolatesLocalAndPortOverride(t *testing.T) {
 	root.SetArgs([]string{"sync", "--port", "bad"})
 	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "PORT") {
 		t.Fatalf("invalid port: %v", err)
+	}
+	root = Root()
+	root.SetArgs([]string{"sync", "--ctx", "100"})
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "CTX") {
+		t.Fatalf("invalid ctx: %v", err)
 	}
 	after, _ := os.ReadFile(paths.LegacyQwenSettings())
 	if string(after) != string(ordinary) {

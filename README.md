@@ -12,8 +12,12 @@ cd local-coding-agent-setup
 ./setup.sh
 ```
 
-Then in one terminal `llama-coder`, in another `qwen-local` inside your project. `lca` (no
-arguments) opens a small terminal UI for settings and response times; `lca doctor` checks the install.
+Then `qwen-local` inside your project. It takes the first free port from config.env's `PORT`
+upward, starts `llama-coder` there itself when nothing is listening, waits for the model to load,
+and stops that server when it exits. To watch the
+server in its own terminal, run `llama-coder` first; `qwen-local` then uses it and leaves it
+running. `lca` (no arguments) opens a small terminal UI for settings and response times;
+`lca doctor` checks the install.
 
 ## What it installs
 
@@ -124,7 +128,7 @@ CTX=32768 llama-coder                # one-off override; PORT works the same way
 | `MODEL_PATH` | `-m` | from the memory profile | absolute path to an existing `.gguf` |
 | `ALIAS` | `--alias` | `qwen3.5-9b` / `qwen3.6-35b-a3b` | also the Qwen Code provider id and `OPENAI_MODEL` |
 | `CTX` | `-c` | `65536` / `131072` | 2048 to 1048576, multiple of 256; mirrored to Qwen's `contextWindowSize` |
-| `PORT` | `--port` | `8080` | both launchers in one instance must use the same port |
+| `PORT` | `--port` | `8080` | first port `qwen-local` tries; `PORT=` in the environment pins it for both launchers |
 | `TEMP` | `--temp` | `0.7` | Unsloth non-thinking recommendation for Qwen3.5/3.6 |
 | `TOP_P` | `--top-p` | `0.8` | |
 | `TOP_K` | `--top-k` | `20` | |
@@ -137,8 +141,9 @@ CTX=32768 llama-coder                # one-off override; PORT works the same way
 
 Restart rules: every key needs a restart of `llama-coder`. `ALIAS`, `PORT` and `CTX` also need a
 restart of `qwen-local`, because Qwen Code reads `modelProviders` at startup. `lca config set`
-prints the hint. setup.sh, `lca sync`, and every `qwen-local` launch prepare
-`${XDG_CONFIG_HOME:-~/.config}/llama-coder/qwen/settings.json` for the port in config.env. Its
+prints the hint. setup.sh, `lca sync`, and every `qwen-local` launch on config.env's own port
+prepare `${XDG_CONFIG_HOME:-~/.config}/llama-coder/qwen/settings.json`; a launch on any other port
+prepares `qwen-<port>/settings.json` next to it and points `QWEN_HOME` there. The file's
 provider entry is under `modelProviders.openai[]` with `id` = `ALIAS`, `baseUrl` =
 `http://127.0.0.1:PORT/v1`, `envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize`
 = `CTX`. Preparation also selects the local model, OpenAI authentication, and lean defaults,
@@ -153,15 +158,30 @@ The launcher rejects duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints
 
 ### Running more than one instance
 
-A one-off `PORT=9000 llama-coder` plus `PORT=9000 qwen-local` prepares the matching endpoint
-without saving the override to config.env, and runs as a second, independent instance: because
-`9000` differs from config.env's own `PORT`, its Qwen settings land in
-`.../llama-coder/qwen-9000/settings.json` rather than the shared `qwen/settings.json` the
-default port uses, so `lca sync` never races or overwrites the default instance's provider
-entry. Start as many `llama-coder`/`qwen-local` pairs as you have RAM for, each on its own
-`PORT` — every `llama-server` loads a full copy of the model, and each shares that server's
-single request slot (`-np 1`) across whatever clients point at its port. `lca doctor` and
-`lca stats` only cover the port configured in config.env.
+Every `qwen-local` session gets its own `llama-server`. Without `PORT=` in the environment it
+takes the first port from config.env's `PORT` upward that no other running `qwen-local` holds, so
+a second session in another project lands on `8081`, a third on `8082`, and so on (a port where
+something other than `llama-server` answers is skipped too). On that port it uses a server that is
+already listening (waiting while one is still loading the model), or starts `llama-coder` in the
+background and stops it again when Qwen Code exits. A server you started yourself with
+`llama-coder` is used as is and never stopped. Each session records its claim in
+`${XDG_STATE_HOME:-~/.local/state}/llama-coder/instances/<port>/` (`owner.pid`, `server.pid` for a
+server it started, `launcher.log` with that server's console output, `sharers/<pid>` for sessions
+sharing a pinned port); claims whose owner has died are cleared, and a server left behind by a
+crashed session is adopted and stopped by the next session on that port. `CTX=` passes through to
+a server started this way and to that instance's Qwen `contextWindowSize`;
+`QWEN_LOCAL_START_TIMEOUT` (seconds, default 600) bounds the wait for the model to load.
+
+`PORT=9000 qwen-local` pins the port instead: same rules, except that a port another running
+`qwen-local` holds is shared. The owner then leaves the server running when it exits, and it keeps
+running after the sharer exits until the next session on that port adopts and stops it. A
+one-off `PORT=9000 llama-coder` still works for starting a server by hand. Because `9000` differs
+from config.env's own `PORT`, that session's Qwen settings land in
+`.../llama-coder/qwen-9000/settings.json` rather than the shared `qwen/settings.json` the default
+port uses, so `lca sync` never races or overwrites the default instance's provider entry. Every
+`llama-server` loads a full copy of the model and serves a single request slot (`-np 1`), so RAM
+bounds how many sessions you can run. `lca doctor` only covers the port configured in config.env;
+`lca stats` reads the usage logs of every instance.
 
 ## Response times
 
@@ -173,7 +193,8 @@ its `/metrics` endpoint every two seconds (`lca metrics` prints one scrape).
 
 - **Qwen Code** writes one JSON line per API call to
   `~/.config/llama-coder/qwen/usage/token-usage-YYYY-MM.jsonl` for `qwen-local`
-  (under `XDG_CONFIG_HOME` when set). Stats also read legacy `~/.qwen/usage` logs and
+  (under `XDG_CONFIG_HOME` when set), or `qwen-<port>/usage/` for a session on another port.
+  Stats read every instance's directory, plus legacy `~/.qwen/usage` logs, and
   deduplicate records by ID, keeping historical calls visible. Each record includes
   `apiDurationMs`, input/output tokens, model and caller (`main` or a subagent). This is the
   end-to-end time an agent turn waits for. It is on unless `privacy.usageStatisticsEnabled` is false
@@ -190,8 +211,8 @@ not a measurement of generation speed. Use server timings to separate those cost
 
 ## Lean Qwen Code profile
 
-`qwen-local` automatically uses lean defaults in its dedicated configuration. Start
-`llama-coder`, then `qwen-local` inside your project; no model picker or profile command is needed.
+`qwen-local` automatically uses lean defaults in its dedicated configuration. Run `qwen-local`
+inside your project; it starts the server if needed, and no model picker or profile command is needed.
 Ordinary `qwen` retains its own models, credentials, and settings. Local sessions and runtime
 files use the dedicated Qwen directory; existing ordinary Qwen sessions are not migrated.
 Project instructions, permissions, and deliberate project tool settings retain Qwen’s normal
@@ -236,7 +257,7 @@ This builds `lca`, installs both launchers, and prepares the dedicated lean Qwen
 upgrade packages, download models, or start/restart a server. Existing config.env is preserved.
 If absent (as with the old static launcher), it seeds config.env from the downloaded model for
 the detected memory profile. Override `MODEL_PATH`, `ALIAS`, `CTX`, and `PORT` for a custom model.
-Go, Python 3 and ripgrep must already be available. Then start `llama-coder` and `qwen-local`.
+Go, Python 3 and ripgrep must already be available. Then run `qwen-local`.
 
 ## Measure before selecting performance defaults
 

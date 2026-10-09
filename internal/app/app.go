@@ -211,7 +211,7 @@ func Doctor() []Check {
 		if server.Health(port) {
 			add("server /health", true, fmt.Sprintf("port %d", port))
 		} else {
-			warn("server /health", fmt.Sprintf("nothing on port %d; start llama-coder", port))
+			warn("server /health", fmt.Sprintf("nothing on port %d; qwen-local starts one, or run llama-coder", port))
 		}
 	}
 	return out
@@ -256,6 +256,15 @@ type Stats struct {
 	Notes     []string
 }
 
+// UsageSources names the directories CollectStats reads Qwen usage from.
+func UsageSources() string {
+	var parts []string
+	for _, d := range paths.QwenUsageDirs() {
+		parts = append(parts, paths.Tildify(d))
+	}
+	return strings.Join(parts, ", ")
+}
+
 // CollectStats compacts server logs, then reads both sources since days ago,
 // keeping only model when non-empty.
 func CollectStats(days int, model string, src Source) (Stats, error) {
@@ -273,7 +282,7 @@ func CollectStats(days int, model string, src Source) (Stats, error) {
 		s.Server = stats.FromServer(s.ServerRaw)
 	}
 	if src != SourceServer {
-		recs, skipped, err := qwen.ReadUsageDirs(since, paths.QwenUsageDir(), paths.LegacyQwenUsageDir())
+		recs, skipped, err := qwen.ReadUsageDirs(since, paths.QwenUsageDirs()...)
 		if err != nil {
 			return s, err
 		}

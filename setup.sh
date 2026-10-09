@@ -153,8 +153,8 @@ log "Done"
 cat <<MSG
 
 Next steps:
-  1. In one terminal:   llama-coder
-  2. In another:        cd <your-project> && qwen-local
+  cd <your-project> && qwen-local      (starts llama-server itself and stops it on exit)
+  or run llama-coder first to watch the server in its own terminal
 
 Profile: ${MEM_GB} GB detected (${PROFILE})
 Model:   ${MODEL_PATH}

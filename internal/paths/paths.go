@@ -64,6 +64,17 @@ func QwenSettingsFor(port, cfgPort string) string {
 // QwenUsageDir holds Qwen Code's token-usage-YYYY-MM.jsonl files.
 func QwenUsageDir() string { return filepath.Join(QwenDir(), "usage") }
 
+// QwenUsageDirs lists every directory lca stats reads Qwen usage from: the
+// default instance's, every qwen-<port> instance qwen-local has created
+// (sorted by name), then the legacy ~/.qwen one. Earlier entries win for
+// duplicate record IDs.
+func QwenUsageDirs() []string {
+	dirs := []string{QwenUsageDir()}
+	extra, _ := filepath.Glob(filepath.Join(ConfigDir(), "qwen-*", "usage"))
+	dirs = append(dirs, extra...)
+	return append(dirs, LegacyQwenUsageDir())
+}
+
 // LegacyQwenDir holds ordinary Qwen settings and historical usage.
 func LegacyQwenDir() string { return filepath.Join(home(), ".qwen") }
 
