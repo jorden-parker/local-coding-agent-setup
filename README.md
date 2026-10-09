@@ -12,6 +12,11 @@ cd local-coding-agent-setup
 ./setup.sh
 ```
 
+`./setup.sh` is the only command, for the first install and for every update after it: re-run it
+and it fast-forwards this checkout, upgrades the Homebrew packages, rebuilds `lca`, reinstalls
+the launchers, re-syncs Qwen Code's settings and runs `lca doctor`. config.env and downloaded
+models are kept (see [Update](#update)).
+
 Then `qwen-local` inside your project. It takes the first free port from config.env's `PORT`
 upward, starts `llama-coder` there itself when nothing is listening, waits for the model to load,
 and stops that server when it exits. To watch the
@@ -24,10 +29,10 @@ running. `lca` (no arguments) opens a small terminal UI for settings and respons
 | Item | Source |
 |---|---|
 | Homebrew | official install script (skipped if already installed) |
-| llama.cpp | Homebrew formula `llama.cpp` |
-| hf (HuggingFace CLI) | Homebrew formula `hf` |
-| Qwen Code | Homebrew formula `qwen-code` (skipped if already installed) |
-| Go | Homebrew formula `go` (skipped if already installed); builds `lca` |
+| llama.cpp | Homebrew formula `llama.cpp` (upgraded on every run; Qwen3.x needs a recent build) |
+| hf (HuggingFace CLI) | Homebrew formula `hf` (upgraded on every run) |
+| Qwen Code | Homebrew formula `qwen-code` (upgraded on every run; left alone if `qwen` was installed another way) |
+| Go | Homebrew formula `go` (upgraded on every run; left alone if `go` was installed another way); builds `lca` |
 | `~/.local/bin/llama-coder` | launcher for llama-server, copied from `launchers/llama-coder` |
 | `~/.local/bin/qwen-local` | launcher for Qwen Code, copied from `launchers/qwen-local` |
 | `~/.local/bin/lca` | Go tool built from `cmd/lca`: config editor, Qwen sync, response-time stats |
@@ -72,7 +77,7 @@ Options on this profile:
 
 - Better quality, slower: swap to `Qwen3.5-9B-UD-Q6_K_XL.gguf` (8.8 GB) with
   `MODEL_FILE=Qwen3.5-9B-UD-Q6_K_XL.gguf ./setup.sh`. On an existing install that only downloads
-  the file, because config.env is kept; then point at it with
+  the file, because config.env is kept; setup.sh then prints the switch, which is
   `lca config set MODEL_PATH ~/models/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q6_K_XL.gguf`.
 - Try the full context: `CTX=131072 llama-coder`. Expect memory pressure.
 
@@ -110,9 +115,9 @@ ALIAS=qwen3.8-27b ./setup.sh
 
 Qwen3.8-27B is dense and scores higher (SWE-bench Pro 61.7 vs 49.5) but generates
 several times slower on Apple Silicon. It does not fit a 16 GB machine. On an existing install
-setup.sh only downloads the model, because config.env is kept; then switch to it with
-`lca config set MODEL_PATH ~/models/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL.gguf` and
-`lca config set ALIAS qwen3.8-27b`.
+setup.sh only downloads the model, because config.env is kept, and prints the two lines that
+switch to it: `lca config set MODEL_PATH ~/models/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL.gguf`
+and `lca config set ALIAS qwen3.8-27b`.
 
 ## Configure without re-running setup.sh
 
@@ -259,17 +264,31 @@ On the disposable M1 coding fixture, lean reduced median session time from 343 t
 (47%), with all six sessions passing shell, discovery and correctness checks. This is a small-task
 measurement; M4 and long-task results remain pending. See the [measured report](docs/performance/2026-10-08.md).
 
-## Update tools without downloading models
+## Update
 
 ```bash
-./tools/install-tools.sh
+./setup.sh
 ```
 
-This builds `lca`, installs both launchers, and prepares the dedicated lean Qwen configuration. It does not install or
-upgrade packages, download models, or start/restart a server. Existing config.env is preserved.
-If absent (as with the old static launcher), it seeds config.env from the downloaded model for
-the detected memory profile. Override `MODEL_PATH`, `ALIAS`, `CTX`, and `PORT` for a custom model.
-Go, Python 3 and ripgrep must already be available. Then run `qwen-local`.
+The same command updates an existing install. Each run, in order:
+
+1. Fast-forwards this checkout with `git pull --ff-only`. Skipped when the checkout has local
+   changes or no upstream branch; a failed pull (offline, diverged) is a warning. When new
+   commits arrive, setup.sh restarts itself so the rest of the run uses them.
+2. Installs Homebrew if missing, then installs any of `llama.cpp`, `hf`, `go`, `qwen-code` whose
+   command is absent and upgrades the ones Homebrew already manages. A failed upgrade is a
+   warning. A `go` or `qwen` installed some other way is left alone.
+3. Checks the model: if config.env points at a file that exists, nothing is downloaded, so
+   updates work offline. If config.env is missing or points at the memory profile's default
+   path, the default model is downloaded (skipped when present). If config.env points at a
+   custom model that is missing, setup.sh stops and says how to download one.
+   `MODEL_REPO`/`MODEL_FILE`/`ALIAS` always download that model (see Swap above).
+4. Seeds config.env if absent, otherwise keeps it and prints how it differs from the defaults.
+5. Reinstalls both launchers and rebuilds `lca` from the checkout.
+6. Runs `lca sync`, then `lca doctor`; setup.sh exits non-zero if doctor reports a failure.
+
+A running `llama-server` is never stopped; restart `llama-coder` or `qwen-local` to pick up a
+new llama.cpp build or launcher.
 
 ## Measure before selecting performance defaults
 

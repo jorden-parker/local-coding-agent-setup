@@ -151,7 +151,7 @@ func Doctor() []Check {
 		case !strings.Contains(string(b), "config.env"):
 			add(name, false, paths.Tildify(p)+" is the old setup-time version; re-run setup.sh")
 		case name == "qwen-local" && (!strings.Contains(string(b), "QWEN_HOME") || !strings.Contains(string(b), "--auth-type openai --model")):
-			add(name, false, paths.Tildify(p)+" does not pin the local model; run tools/install-tools.sh")
+			add(name, false, paths.Tildify(p)+" does not pin the local model; re-run setup.sh")
 		default:
 			add(name, true, paths.Tildify(p))
 		}

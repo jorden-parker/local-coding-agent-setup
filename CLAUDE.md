@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`setup.sh` installs llama.cpp, Qwen Code and Go with Homebrew, downloads a Qwen GGUF model to `~/models`, seeds `~/.config/llama-coder/config.env`, installs the two static launchers from `launchers/` to `~/.local/bin`, builds the Go tool `lca` (`cmd/lca`, `internal/`) there too, and runs `lca sync` to write Qwen Code's provider entry. `lca` edits config.env, syncs Qwen, and summarises response times (CLI subcommands and a Charm TUI). `README.md` documents it. `.claude/` holds the check hook and the `/sync-readme` skill. macOS on Apple Silicon only.
+`setup.sh` is the single install-and-update command: it fast-forwards this checkout (re-executing itself when commits arrive), installs or upgrades llama.cpp, hf, Qwen Code and Go with Homebrew, downloads a Qwen GGUF model to `~/models` unless config.env already points at one that exists, seeds `~/.config/llama-coder/config.env`, installs the two static launchers from `launchers/` to `~/.local/bin`, builds the Go tool `lca` (`cmd/lca`, `internal/`) there too, and runs `lca sync` to write Qwen Code's provider entry, then `lca doctor` (a doctor failure makes setup.sh exit non-zero). There is no separate updater; re-running setup.sh is the update. `lca` edits config.env, syncs Qwen, and summarises response times (CLI subcommands and a Charm TUI). `README.md` documents it. `.claude/` holds the check hook and the `/sync-readme` skill. macOS on Apple Silicon only.
 
 ## Never run setup.sh or the installed launchers
 
-setup.sh downloads ~22 GB, runs `brew install`/`brew upgrade`, and overwrites `~/.local/bin/{llama-coder,qwen-local,lca}` without asking. `lca config set`, `lca config edit`, `lca sync`, and the TUI's Config tab write `config.env` and `~/.qwen/settings.json` for the real user when run against the real HOME. Verify changes statically only:
+setup.sh runs `git pull --ff-only` on this checkout, downloads ~22 GB, runs `brew install`/`brew upgrade`, and overwrites `~/.local/bin/{llama-coder,qwen-local,lca}` without asking. `lca config set`, `lca config edit`, `lca sync`, and the TUI's Config tab write `config.env` and `~/.qwen/settings.json` for the real user when run against the real HOME. Verify changes statically only:
 
 ```bash
 bash -n setup.sh && shellcheck setup.sh launchers/llama-coder launchers/qwen-local .claude/hooks/check.sh
@@ -32,7 +32,7 @@ To check a Homebrew package, use `brew info <formula>` (read-only). Never `brew 
 
 ## Keep README.md in sync with setup.sh
 
-Model repo/file/alias, default `CTX` and `PORT`, model file size, both memory profiles and the threshold that selects them, the config.env defaults and key table, the `llama-server` flags in `launchers/llama-coder`, the install list (now including Go and the three binaries), the `lca` command list, the Qwen settings keys `lca sync` writes, and the reasons for them appear in both files. Change both. Run `/sync-readme` to check.
+Model repo/file/alias, default `CTX` and `PORT`, model file size, both memory profiles and the threshold that selects them, the config.env defaults and key table, the `llama-server` flags in `launchers/llama-coder`, the install list (now including Go and the three binaries), the update steps (pull, package upgrade, model check, doctor), the `lca` command list, the Qwen settings keys `lca sync` writes, and the reasons for them appear in both files. Change both. Run `/sync-readme` to check.
 
 ## Conventions
 

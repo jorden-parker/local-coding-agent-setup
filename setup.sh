@@ -1,19 +1,28 @@
 #!/usr/bin/env bash
-# Local coding agent setup for Apple Silicon Macs.
+# Local coding agent setup for Apple Silicon Macs: the one command for installing and updating.
 # Tested targets: MacBook Pro M4 Pro 48 GB and MacBook Air M1 16 GB.
-# Installs llama.cpp + Qwen Code + Go (builds lca), downloads a Qwen GGUF model, seeds
-# ~/.config/llama-coder/config.env, and installs three binaries to ~/.local/bin:
-#   llama-coder   -> starts the local model server on http://127.0.0.1:8080
-#   qwen-local    -> runs Qwen Code against that server
-#   lca           -> edits config.env, syncs Qwen Code's provider entry, shows response times
+#
+# Every run, in order:
+#   1. fast-forwards this checkout (skipped when it has local changes or no upstream)
+#   2. installs Homebrew if missing, then installs or upgrades llama.cpp, hf, Go and Qwen Code
+#   3. downloads the Qwen GGUF model for the detected memory profile unless config.env already
+#      points at a model that exists
+#   4. seeds ~/.config/llama-coder/config.env once (never overwritten)
+#   5. installs three binaries to ~/.local/bin:
+#        llama-coder   -> starts the local model server on http://127.0.0.1:8080
+#        qwen-local    -> runs Qwen Code against that server
+#        lca           -> edits config.env, syncs Qwen Code's provider entry, shows response times
+#   6. runs `lca sync` (Qwen Code's provider entry) and `lca doctor` (verifies the install)
 #
 # The model is picked from detected memory:
 #   < 24 GB  -> Qwen3.5-9B UD-Q4_K_XL (6.0 GB), CTX=65536
 #   >= 24 GB -> Qwen3.6-35B-A3B UD-Q4_K_XL (22.4 GB), CTX=131072
 #
-# Re-runnable. config.env is seeded once and never overwritten; after that, change
-# settings with `lca config set KEY VALUE` (or `lca` for the UI), not by re-running.
-# Env var overrides below only affect the first run (the seeded config.env), e.g.:
+# Re-run ./setup.sh to update. config.env is seeded once and never overwritten; after that,
+# change settings with `lca config set KEY VALUE` (or `lca` for the UI), not by re-running.
+# CTX, PORT, CACHE_RAM and CTX_CHECKPOINTS below only affect the first run (the seeded
+# config.env). MODEL_REPO/MODEL_FILE/ALIAS download that model on any run and, on an existing
+# install, print the `lca config set` lines that switch to it, e.g.:
 #   CTX=65536 ./setup.sh
 #   MODEL_REPO=unsloth/Qwen3.8-27B-GGUF MODEL_FILE=Qwen3.8-27B-UD-Q4_K_XL.gguf ALIAS=qwen3.8-27b ./setup.sh
 #   MODEL_REPO=unsloth/Qwen3.5-9B-GGUF MODEL_FILE=Qwen3.5-9B-UD-Q4_K_XL.gguf ALIAS=qwen3.5-9b ./setup.sh   # small model on a big machine
@@ -26,6 +35,7 @@ log() { printf '\n==> %s\n' "$*"; }
 [[ "$(uname -m)" == "arm64" ]]  || { echo "This script needs an Apple Silicon Mac."; exit 1; }
 MEM_GB=$(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))
 log "Detected $(sysctl -n machdep.cpu.brand_string), ${MEM_GB} GB unified memory"
+MODEL_GIVEN="${MODEL_REPO:-}${MODEL_FILE:-}"   # non-empty: the caller chose a model explicitly
 
 # --- defaults, chosen by memory profile ----------------------------------------
 if (( MEM_GB < 24 )); then
@@ -58,36 +68,88 @@ if (( MEM_GB < 32 )) && [[ "$MODEL_FILE" == Qwen3.6-35B-A3B-* ]]; then
   echo "Warning: ${MODEL_FILE} needs ~22.4 GB plus context. ${MEM_GB} GB is tight."
 fi
 
-# --- 1. Homebrew -----------------------------------------------------------
+# --- 1. this checkout ------------------------------------------------------------
+# Fast-forward only, never touching local changes. A changed checkout re-executes itself
+# so the rest of this run uses the new launchers, Go sources and script.
+if [[ -z "${LCA_SETUP_REEXEC:-}" ]] && git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if [[ -n "$(git -C "$SCRIPT_DIR" status --porcelain --untracked-files=no)" ]]; then
+    log "Checkout has local changes; not pulling"
+  elif ! git -C "$SCRIPT_DIR" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
+    log "Checkout has no upstream branch; not pulling"
+  else
+    log "Updating checkout ${SCRIPT_DIR}"
+    BEFORE=$(git -C "$SCRIPT_DIR" rev-parse HEAD)
+    if GIT_TERMINAL_PROMPT=0 git -C "$SCRIPT_DIR" pull --ff-only; then
+      if [[ "$(git -C "$SCRIPT_DIR" rev-parse HEAD)" != "$BEFORE" ]]; then
+        log "Checkout updated; restarting setup.sh"
+        LCA_SETUP_REEXEC=1 exec "$SCRIPT_DIR/setup.sh" "$@"
+      fi
+    else
+      echo "Warning: git pull failed (offline or diverged); continuing with the current checkout"
+    fi
+  fi
+fi
+
+# --- 2. Homebrew packages -------------------------------------------------------
 if ! command -v brew >/dev/null 2>&1; then
   log "Installing Homebrew"
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
-
-# --- 2. llama.cpp + HuggingFace CLI + Go --------------------------------------
-log "Installing llama.cpp and hf (HuggingFace CLI)"
-brew install llama.cpp hf
-brew upgrade llama.cpp hf 2>/dev/null || true   # Qwen3.x needs a recent build
-if ! command -v go >/dev/null 2>&1; then
-  log "Installing Go (builds the lca tool)"
-  brew install go
+# formula:command pairs. A formula Homebrew already manages is upgraded (Qwen3.x needs a
+# recent llama.cpp build); a command found outside Homebrew is left alone; anything else
+# is installed.
+INSTALL=()
+UPGRADE=()
+BREW_INSTALLED=$(brew list --formula --versions llama.cpp hf go qwen-code 2>/dev/null | cut -d' ' -f1 || true)
+for pair in llama.cpp:llama-server hf:hf go:go qwen-code:qwen; do
+  formula="${pair%%:*}"
+  binary="${pair##*:}"
+  if grep -qx "$formula" <<<"$BREW_INSTALLED"; then
+    UPGRADE+=("$formula")
+  elif command -v "$binary" >/dev/null 2>&1; then
+    echo "${binary} found outside Homebrew ($(command -v "$binary")); not upgrading it"
+  else
+    INSTALL+=("$formula")
+  fi
+done
+if (( ${#INSTALL[@]} > 0 )); then
+  log "Installing ${INSTALL[*]}"
+  brew install "${INSTALL[@]}"
+fi
+if (( ${#UPGRADE[@]} > 0 )); then
+  log "Upgrading ${UPGRADE[*]}"
+  brew upgrade "${UPGRADE[@]}" || echo "Warning: brew upgrade failed; continuing with the installed versions"
 fi
 
-# --- 3. Qwen Code ------------------------------------------------------------
-if ! command -v qwen >/dev/null 2>&1; then
-  log "Installing Qwen Code"
-  brew install qwen-code
+# --- 3. Model ----------------------------------------------------------------------
+# Download target: the explicit MODEL_REPO/MODEL_FILE, else the model config.env already
+# points at, else the memory profile's default.
+DEFAULT_MODEL_PATH="$MODELS_DIR/$(basename "$MODEL_REPO")/$MODEL_FILE"
+MODEL_PATH="$DEFAULT_MODEL_PATH"
+if [[ -z "$MODEL_GIVEN" && -f "$CONFIG" ]]; then
+  # shellcheck source=/dev/null
+  CONFIGURED_MODEL=$(source "$CONFIG" >/dev/null 2>&1 || true; printf '%s' "${MODEL_PATH:-}")
+  [[ -n "$CONFIGURED_MODEL" ]] && MODEL_PATH="$CONFIGURED_MODEL"
+fi
+if [[ -f "$MODEL_PATH" ]]; then
+  log "Model present: ${MODEL_PATH}"
+elif [[ "$MODEL_PATH" != "$DEFAULT_MODEL_PATH" ]]; then
+  cat >&2 <<MSG
+config.env points at ${MODEL_PATH}, which does not exist.
+Put the file back, or download one with
+  MODEL_REPO=<owner/repo> MODEL_FILE=<file.gguf> ALIAS=<alias> ./setup.sh
+and switch to it with the lca config set lines it prints.
+MSG
+  exit 1
+else
+  log "Downloading ${MODEL_REPO} / ${MODEL_FILE} to ${MODELS_DIR}"
+  mkdir -p "$MODELS_DIR"
+  hf download "$MODEL_REPO" "$MODEL_FILE" --local-dir "$MODELS_DIR/$(basename "$MODEL_REPO")"
+  [[ -f "$MODEL_PATH" ]] || { echo "Download failed: $MODEL_PATH not found"; exit 1; }
 fi
 
-# --- 4. Model download -------------------------------------------------------
-log "Downloading ${MODEL_REPO} / ${MODEL_FILE} to ${MODELS_DIR} (skips if present)"
-mkdir -p "$MODELS_DIR"
-hf download "$MODEL_REPO" "$MODEL_FILE" --local-dir "$MODELS_DIR/$(basename "$MODEL_REPO")"
-MODEL_PATH="$MODELS_DIR/$(basename "$MODEL_REPO")/$MODEL_FILE"
-[[ -f "$MODEL_PATH" ]] || { echo "Download failed: $MODEL_PATH not found"; exit 1; }
-
-# --- 5. config.env (seeded once, never overwritten) ---------------------------
+# --- 4. config.env (seeded once, never overwritten) ---------------------------
 mkdir -p "$BIN_DIR" "$CONFIG_DIR"
 WANT_CONFIG=$(cat <<CFG
 # llama-coder configuration. Created by setup.sh.
@@ -120,11 +182,13 @@ else
   log "Writing ${CONFIG}"
   printf '%s\n' "$WANT_CONFIG" > "$CONFIG"
 fi
-# Use the user's actual settings from here on.
+# Use the user's actual settings from here on; remember what this run downloaded.
+WANT_MODEL_PATH="$MODEL_PATH"
+WANT_ALIAS="$ALIAS"
 # shellcheck source=/dev/null
 source "$CONFIG"
 
-# --- 6. Launchers + lca ---------------------------------------------------------
+# --- 5. Launchers + lca ---------------------------------------------------------
 log "Installing launchers to ${BIN_DIR}"
 install -m 755 "$SCRIPT_DIR/launchers/llama-coder" "$BIN_DIR/llama-coder"
 install -m 755 "$SCRIPT_DIR/launchers/qwen-local" "$BIN_DIR/qwen-local"
@@ -133,13 +197,17 @@ log "Building ${BIN_DIR}/lca"
 LCA_VERSION=$(git -C "$SCRIPT_DIR" describe --tags --always 2>/dev/null || echo dev)
 (cd "$SCRIPT_DIR" && go build -trimpath -ldflags "-s -w -X main.version=${LCA_VERSION}" -o "$BIN_DIR/lca" ./cmd/lca)
 
-# --- 7. Managed lean Qwen Code configuration ----------------------------------------------
+# --- 6. Managed lean Qwen Code configuration, then verify ----------------------------------
 # Qwen sizes its context from modelProviders.openai[].generationConfig.contextWindowSize;
 # without it, compaction triggers early. lca sync also selects the model and lean defaults.
 log "Preparing lean ${QWEN_SETTINGS} (provider ${ALIAS}, contextWindowSize ${CTX})"
 "$BIN_DIR/lca" sync
 
-# --- 8. PATH hint ------------------------------------------------------------
+log "Checking the install (lca doctor)"
+DOCTOR_OK=1
+"$BIN_DIR/lca" doctor || DOCTOR_OK=0
+
+# --- 7. PATH hint ------------------------------------------------------------
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *)
@@ -149,7 +217,17 @@ case ":$PATH:" in
     ;;
 esac
 
-log "Done"
+if [[ -n "$MODEL_GIVEN" && "$WANT_MODEL_PATH" != "$MODEL_PATH" ]]; then
+  log "Downloaded ${WANT_MODEL_PATH}; config.env still uses ${MODEL_PATH}. Switch with:"
+  echo "  lca config set MODEL_PATH \"${WANT_MODEL_PATH}\""
+  echo "  lca config set ALIAS ${WANT_ALIAS}"
+fi
+
+if (( DOCTOR_OK )); then
+  log "Done"
+else
+  log "Done, but lca doctor reported failures (see above)"
+fi
 cat <<MSG
 
 Next steps:
@@ -164,6 +242,8 @@ Config:  ${CONFIG}
          one-off:     CTX=65536 llama-coder
 Qwen:    ${QWEN_SETTINGS} uses lean defaults and model ${ALIAS} with contextWindowSize ${CTX}
 Timing:  server logs in ${XDG_STATE_HOME:-$HOME/.local/state}/llama-coder; review with: lca stats
+Update:  re-run ./setup.sh (pulls this repo, upgrades packages, rebuilds lca, keeps config.env)
 Check:                    lca doctor
 Benchmark:                llama-bench -m "${MODEL_PATH}" -ngl 99 -p 512 -n 128
 MSG
+(( DOCTOR_OK ))

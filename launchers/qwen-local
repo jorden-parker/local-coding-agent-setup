@@ -48,7 +48,7 @@ for arg in "$@"; do
       ;;
   esac
 done
-command -v lca >/dev/null 2>&1 || { echo "lca is missing. Run tools/install-tools.sh first." >&2; exit 1; }
+command -v lca >/dev/null 2>&1 || { echo "lca is missing. Run setup.sh first." >&2; exit 1; }
 
 claim=""       # instances/<port> this session owns, if any
 server_pid=""  # llama-server this session started or adopted, if any
