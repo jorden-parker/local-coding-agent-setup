@@ -29,7 +29,17 @@
 # Each session holds ${XDG_STATE_HOME:-~/.local/state}/llama-coder/instances/
 # <port>/ with owner.pid, server.pid (only when it started the server, or
 # adopted one a crashed session left behind), launcher.log (that server's
-# console output) and sharers/<pid>. Sessions on different ports share one
+# console output) and sharers/<pid>.
+#
+# A llama-server whose Metal backend has failed a command buffer, usually by
+# running out of GPU memory, cannot recover and answers every request with
+# "Compute error" — while /health, /slots and /metrics all still report it
+# healthy. launcher.log is the only signal, so it is checked before adopting a
+# server (that port is skipped, and a stale server stopped so its memory is
+# free for the replacement) and watched for the rest of the session, since a
+# server can wedge hours after a healthy start.
+#
+# Sessions on different ports share one
 # harness configuration, so the provider entry's baseUrl is whichever port
 # synced last; each session still talks to its own server, because Qwen Code
 # gets --openai-base-url from here. pi has no base-URL flag, so pin PORT= in
@@ -64,6 +74,10 @@ esac
 [[ -z "$env_port" || "$env_port" =~ ^[0-9]+$ ]] || { echo "PORT must be a number, not '$env_port'" >&2; exit 1; }
 timeout="${LOCAL_HARNESS_START_TIMEOUT:-${QWEN_LOCAL_START_TIMEOUT:-600}}"
 [[ "$timeout" =~ ^[0-9]+$ ]] || { echo "LOCAL_HARNESS_START_TIMEOUT must be a number of seconds" >&2; exit 1; }
+# How often the backend watcher re-reads the server log. Seconds; the default
+# is fine, it exists so the tests do not have to wait half a minute.
+watch_interval="${LOCAL_HARNESS_WATCH_INTERVAL:-30}"
+[[ "$watch_interval" =~ ^[0-9]+$ ]] || { echo "LOCAL_HARNESS_WATCH_INTERVAL must be a number of seconds" >&2; exit 1; }
 
 # These settings belong to config.env. Do not let forwarded flags undo them.
 for arg in "$@"; do
@@ -92,6 +106,7 @@ claim=""       # instances/<port> this session owns, if any
 server_pid=""  # llama-server this session started or adopted, if any
 inherited=""   # set when server_pid was adopted from a crashed session
 sharer=""      # instances/<port>/sharers/<pid> marker when sharing a pinned port
+watcher=""     # background job watching the server log for a wedged backend
 
 # HTTP status of /health: 000 nothing listening, 503 llama-server still
 # loading, 200 ready, anything else is not llama-server.
@@ -99,6 +114,48 @@ probe() {
   local code
   code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 1 --max-time 2 "http://127.0.0.1:$1/health" 2>/dev/null) || true
   printf '%s' "${code:-000}"
+}
+
+# ggml's own words when a Metal command buffer has failed (usually by running
+# out of wired GPU memory): "backend is in error state from a previous command
+# buffer failure - recreate the backend to recover". There is no recovering in
+# process, and every later request answers "Compute error".
+WEDGED_MARKER='backend is in error state'
+
+# True when the server on port $1 has wedged. Its log is the only signal:
+# /health still answers {"status":"ok"}, /slots still reports an idle healthy
+# slot and /metrics has no error counter. Only a server started under a claim
+# has a log here, so a hand-started llama-coder is never scanned.
+wedged() {
+  local log="$INSTANCES/$1/launcher.log"
+  [[ -f "$log" ]] || return 1
+  # The marker repeats for every request after the first failure, so the tail
+  # is enough and bounds the read on a long-running server's log.
+  tail -c 65536 "$log" 2>/dev/null | grep -q "$WEDGED_MARKER"
+}
+
+# Watch the running server's log and say so, once, if its backend wedges. A
+# server can be healthy at launch and fail hours later, so checking only at
+# startup would leave the harness reporting a bare "Compute error" with no
+# cause. This polls rather than piping `tail -F` into grep, so the trap has a
+# single pid to kill instead of a pipeline whose halves die separately. It
+# deliberately does not stop the server: the harness may be mid-turn, and
+# pulling the server out from under it would replace a clear message with a
+# confusing connection failure.
+# shellcheck disable=SC2317,SC2329
+watch_wedge() {
+  local log="$1" owner="$2"
+  while sleep "$watch_interval"; do
+    # The trap kills this, but a SIGKILLed launcher runs no trap, so stop on
+    # our own when the session that started us is gone.
+    kill -0 "$owner" 2>/dev/null || return 0
+    if tail -c 65536 "$log" 2>/dev/null | grep -q "$WEDGED_MARKER"; then
+      echo "" >&2
+      echo "$tag: llama-server's Metal backend has hit an unrecoverable error (out of GPU memory)." >&2
+      echo "$tag: every request from here answers \"Compute error\". Quit this session and run $tag again." >&2
+      return 0
+    fi
+  done
 }
 
 pid_alive() { [[ -n "$1" ]] && kill -0 "$1" 2>/dev/null; }
@@ -148,6 +205,17 @@ release_claim() {
   claim=""
 }
 
+# Stop a server adopted from a dead session's claim and forget it, for when
+# this session walks away from the port instead of using it. Without this the
+# EXIT trap would later kill a server on a port we never took, and on a 16 GB
+# machine its memory would still be held while the replacement tries to load.
+stop_inherited() {
+  [[ -n "$inherited" ]] || return 0
+  kill -TERM "$server_pid" 2>/dev/null
+  server_pid=""
+  inherited=""
+}
+
 # Start llama-coder for port $1 in the background. It execs llama-server, so
 # $! is the server's pid. Console output goes to launcher.log; the server's
 # own --log-file in $STATE is unchanged.
@@ -194,6 +262,15 @@ wait_ready() {
 # shellcheck disable=SC2317,SC2329
 cleanup() {
   set +e
+  # Before the sharer early-return below, or a shared port would leak it.
+  # The sleep it is blocked on is a separate process that inherited our
+  # stderr, so killing only the watcher would leave that holding the pipe
+  # open for the rest of the interval. Children first: a killed sleep ends
+  # the watcher's loop by itself.
+  if [[ -n "$watcher" ]]; then
+    pkill -P "$watcher" 2>/dev/null
+    kill "$watcher" 2>/dev/null
+  fi
   [[ -n "$sharer" ]] && rm -f "$sharer"
   if [[ -n "$claim" ]]; then
     local s
@@ -239,14 +316,37 @@ if [[ -n "$env_port" ]]; then
     echo "$$" >"$sharer"
     mode=share
   fi
+  # A pinned port has nowhere to walk to, so say what is wrong instead of
+  # handing the harness a server that answers every request with an error.
+  if [[ "$(probe "$port")" == 200 ]] && wedged "$port"; then
+    echo "$tag: llama-server on port $port has an unrecoverable Metal error (out of GPU memory); it cannot be revived, only replaced." >&2
+    if [[ "$mode" == share ]]; then
+      echo "$tag: quit the session that owns it (pid $(cat "$INSTANCES/$port/owner.pid" 2>/dev/null)), or unset PORT= to let the launcher pick another port." >&2
+    else
+      echo "$tag: unset PORT= to let the launcher pick another port." >&2
+    fi
+    exit 1
+  fi
 else
   for ((i = 0; i < 100; i++)); do
     candidate=$((cfg_port + i))
     [[ "$candidate" -le 65535 ]] || break
     try_claim "$candidate" || continue
     case "$(probe "$candidate")" in
-      200|000|503) port="$candidate"; mode=own; break ;;
-      *) release_claim ;;  # something else lives there; try the next port
+      200)
+        # Healthy by HTTP but dead inside: skip it, and stop it first so its
+        # memory is free for the replacement on the next port.
+        if wedged "$candidate"; then
+          echo "$tag: llama-server on port $candidate has an unrecoverable Metal error; stopping it and trying the next port" >&2
+          stop_inherited
+          release_claim
+          continue
+        fi
+        port="$candidate"; mode=own; break ;;
+      000|503) port="$candidate"; mode=own; break ;;
+      # Something else lives there; try the next port, releasing any server we
+      # adopted from a dead claim so the trap does not kill it later.
+      *) stop_inherited; release_claim ;;
     esac
   done
   [[ -n "$port" ]] || { echo "no free port from $cfg_port upward; set PORT= to pin one" >&2; exit 1; }
@@ -316,6 +416,23 @@ elif [[ "$mode" == share ]]; then
   echo "$tag: port $port, sharing the llama-server held by pid $(cat "$INSTANCES/$port/owner.pid" 2>/dev/null)" >&2
 else
   echo "$tag: port $port, using the llama-server already running there" >&2
+fi
+
+# Age is a rough proxy for accumulated Metal pressure: the failure this guards
+# against took a day of continuous use to appear.
+existing_pid=$(cat "$INSTANCES/$port/server.pid" 2>/dev/null) || true
+if [[ -z "$server_pid" || -n "$inherited" ]] && [[ -n "$existing_pid" ]]; then
+  age=$(ps -o etimes= -p "$existing_pid" 2>/dev/null | tr -d ' ') || true
+  if [[ "$age" =~ ^[0-9]+$ ]] && (( age > 43200 )); then
+    echo "$tag: that llama-server has been up $((age / 3600))h; long-lived Metal servers can exhaust GPU memory. Restart it if requests start failing." >&2
+  fi
+fi
+
+# Only a server under a claim writes a log here to watch.
+if [[ -n "$claim" && -f "$claim/launcher.log" ]]; then
+  watch_wedge "$claim/launcher.log" "$$" &
+  watcher=$!
+  disown "$watcher" 2>/dev/null || true
 fi
 
 # The harness runs as a foreground child, not exec, so the EXIT trap still

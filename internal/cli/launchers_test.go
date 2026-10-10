@@ -133,6 +133,11 @@ printf '%s\n' "$PI_CODING_AGENT_DIR" "${PI_CODING_AGENT_SESSION_DIR-unset}" > "$
 exit 0
 `
 	qwenStub = `#!/bin/bash
+# QWEN_WAIT_FOR holds the harness open until that file appears, so a test can
+# let the background watcher run a few polls while it is still attached.
+if [[ -n "${QWEN_WAIT_FOR:-}" ]]; then
+  for _ in $(seq 1 200); do [[ -e "$QWEN_WAIT_FOR" ]] && break; sleep 0.1; done
+fi
 printf '%s\n' "$@" > "$CAPTURE.args"
 printf '%s\n' "$QWEN_HOME" "$OPENAI_MODEL" "$OPENAI_BASE_URL" "$OPENAI_API_KEY" "${QWEN_CODE_ENABLE_WORKFLOWS-unset}" "${QWEN_CODE_DISABLE_WORKFLOWS-unset}" "${QWEN_RUNTIME_DIR-unset}" > "$CAPTURE.env"
 inst="$XDG_STATE_HOME/llama-coder/instances"

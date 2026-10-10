@@ -38,6 +38,18 @@ func StateDir() string {
 // Timings is the compacted per-request timing file.
 func Timings() string { return filepath.Join(StateDir(), "timings.jsonl") }
 
+// InstancesDir holds one directory per port a harness launcher has claimed.
+// local-harness owns the layout; lca only reads it.
+func InstancesDir() string { return filepath.Join(StateDir(), "instances") }
+
+// InstanceDir is the claim directory for port.
+func InstanceDir(port string) string { return filepath.Join(InstancesDir(), port) }
+
+// LauncherLog is the console output of the llama-server started for port. It
+// is where a Metal backend failure shows up: the server keeps answering
+// /health, /slots and /metrics as if healthy, so its log is the only signal.
+func LauncherLog(port string) string { return filepath.Join(InstanceDir(port), "launcher.log") }
+
 // QwenDir is the Qwen Code configuration directory lca patches: $QWEN_HOME
 // when the shell exports an absolute one, otherwise ~/.qwen. Qwen Code itself
 // honours QWEN_HOME, so ignoring it would let lca write a provider entry the

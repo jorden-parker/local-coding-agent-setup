@@ -315,6 +315,55 @@ server. For pi it is not: pi has no base-URL flag, so `models.json` is the only 
 which port to call, and a second `pi-local` can leave the first pointing at the wrong server.
 Pin `PORT=` in config.env, or run one pi session at a time.
 
+### When the server runs out of GPU memory
+
+Symptom: the harness answers every request with `API Error: Compute error.` — including
+a brand-new prompt in a fresh session — and the server log carries
+
+```
+error: Insufficient Memory (00000008:kIOGPUCommandBufferCallbackErrorOutOfMemory)
+ggml_metal_graph_compute: backend is in error state from a previous
+    command buffer failure - recreate the backend to recover
+```
+
+macOS caps how much of unified memory Metal may wire down: `sysctl iogpu.wired_limit_mb`
+returns `0`, meaning the system default of roughly two thirds of RAM — about 10.6 GB on a 16 GB
+machine. The 16 GB profile spends roughly 6 GB on the model, about 2 GB on a 64K f16 KV cache,
+and the rest on compute buffers, which leaves little headroom. A server that has been up for a
+day, or another app claiming GPU memory, can push one prompt batch over the line.
+
+**It cannot be recovered in place** — llama.cpp says so in that message. The server keeps
+answering `/health` with `{"status":"ok"}`, keeps reporting an idle healthy slot on `/slots`,
+and has no error counter in `/metrics`, so only its log gives it away. The fix is always to
+restart the server.
+
+The launchers handle what they can:
+
+- `qwen-local` and `pi-local` read `instances/<port>/launcher.log` before adopting a server. A
+  wedged one is skipped and the walk moves to the next port; if its owning session is already
+  gone, that server is stopped first, so its memory is free for the replacement. With `PORT=`
+  pinned there is nowhere to walk to, so the launcher refuses and says which session to quit.
+- While a session runs, a background watcher re-reads the same log. A server can be healthy at
+  launch and wedge hours later, and that one line of warning is the difference between a bare
+  `Compute error` and knowing to restart. It never stops the server itself: the harness may be
+  mid-turn.
+- `lca doctor` reports it as `server backend`. A warning, not a failure — a server that died at
+  runtime is not a broken install.
+- Using a server that has been up more than 12 hours prints a note.
+
+A server started by hand with `llama-coder` writes no `launcher.log` under a claim, so none of
+the above sees it; its log is in `~/.local/state/llama-coder/`.
+
+If it keeps happening, give Metal more room or ask for less:
+
+```bash
+lca config set CTX 32768              # halves the KV cache
+sudo sysctl iogpu.wired_limit_mb=12288   # raises the cap; resets on reboot
+```
+
+Quantising the KV cache is *not* a lever here: `launchers/llama-coder` deliberately passes no
+`--cache-type-k/v`, because quantised KV is not optimised for Metal.
+
 ### VS Code IDE companion
 
 This is Qwen Code only; pi has no companion extension.

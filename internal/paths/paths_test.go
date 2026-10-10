@@ -109,3 +109,19 @@ func TestLcaOwnDirsStayUnderXdg(t *testing.T) {
 		t.Errorf("Timings() = %s, want %s", got, want)
 	}
 }
+
+// local-harness owns the claim layout; these must match what it writes.
+func TestInstanceLayoutMatchesTheLauncher(t *testing.T) {
+	home := setHome(t)
+	state := filepath.Join(home, ".state", "llama-coder")
+	cases := map[string]struct{ got, want string }{
+		"instances":    {InstancesDir(), filepath.Join(state, "instances")},
+		"instance":     {InstanceDir("8081"), filepath.Join(state, "instances", "8081")},
+		"launcher.log": {LauncherLog("8081"), filepath.Join(state, "instances", "8081", "launcher.log")},
+	}
+	for name, c := range cases {
+		if c.got != c.want {
+			t.Errorf("%s = %s, want %s", name, c.got, c.want)
+		}
+	}
+}

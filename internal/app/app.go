@@ -325,6 +325,15 @@ func Doctor() []Check {
 		} else {
 			warn("server /health", fmt.Sprintf("nothing on port %d; qwen-local starts one, or run llama-coder", port))
 		}
+		// A wedged backend still answers /health, so the check above cannot
+		// see it. Warn rather than fail: setup.sh gates its exit code on
+		// doctor, and a server that has died at runtime is not a broken
+		// install.
+		if wedged, err := server.Wedged(paths.LauncherLog(values["PORT"])); err != nil {
+			warn("server backend", err.Error())
+		} else if wedged {
+			warn("server backend", fmt.Sprintf("llama-server on port %d has an unrecoverable Metal error (out of GPU memory); stop it and start a new one", port))
+		}
 	}
 	return out
 }
