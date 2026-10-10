@@ -206,3 +206,27 @@ func TestValidateAllReportsMissing(t *testing.T) {
 		t.Errorf("optional key reported: %s", joined)
 	}
 }
+
+func TestHarnessKey(t *testing.T) {
+	for _, v := range []string{"qwen", "pi"} {
+		if warn, err := Validate("HARNESS", v); err != nil || warn != "" {
+			t.Errorf("%s: %v %q", v, err, warn)
+		}
+	}
+	for _, v := range []string{"", "codex", "Pi", "qwen pi"} {
+		if _, err := Validate("HARNESS", v); err == nil {
+			t.Errorf("%q accepted", v)
+		}
+	}
+	// Older config.env files predate the key, so the default has to stand in.
+	k, ok := Lookup("HARNESS")
+	if !ok || k.Default != "qwen" {
+		t.Fatalf("default: %+v", k)
+	}
+	_, errs := ValidateAll(map[string]string{"ALIAS": "a", "CTX": "65536", "PORT": "8080"})
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "HARNESS") {
+			t.Fatalf("an absent HARNESS must fall back to the default: %v", e)
+		}
+	}
+}

@@ -1,4 +1,8 @@
-package qwen
+// Package usage reads the per-request records lca builds response-time
+// statistics from. Qwen Code writes them as token-usage-YYYY-MM.jsonl; the pi
+// harness has no such log, so internal/pi derives the same records from its
+// session files.
+package usage
 
 import (
 	"bufio"
@@ -9,7 +13,7 @@ import (
 	"time"
 )
 
-// Record is one line of token-usage-YYYY-MM.jsonl.
+// Record is one request. The JSON tags are Qwen Code's token-usage-YYYY-MM.jsonl format.
 type Record struct {
 	SchemaVersion int       `json:"schemaVersion"`
 	ID            string    `json:"id"`

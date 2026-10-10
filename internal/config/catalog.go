@@ -22,27 +22,30 @@ const (
 	KindFloat  Kind = "float"
 	KindBool   Kind = "bool"
 	KindArgs   Kind = "args"
+	KindEnum   Kind = "enum"
 )
 
 // Key describes one config.env entry.
 type Key struct {
 	Name    string
 	Kind    Kind
-	Default string // fallback for optional keys absent from older config files
+	Default string   // fallback for optional keys absent from older config files
+	Choices []string // the allowed values of a KindEnum key
 	Min     float64
 	Max     float64
 	Help    string
 	Flag    string // llama-server flag the key feeds, "" if none
-	Syncs   bool   // changing it must also update Qwen's provider entry
-	Restart string // which process must restart for the change to apply
+	Syncs   bool   // changing it must also update the harness provider entry
+	Restart string // which process must restart for the change to apply, "" if none
 }
 
 // Keys is the catalogue in file order.
 var Keys = []Key{
+	{Name: "HARNESS", Kind: KindEnum, Choices: []string{"qwen", "pi"}, Default: "qwen", Help: "Agent harness lca syncs and reports on by default: qwen (Qwen Code) or pi. qwen-local and pi-local always use their own.", Syncs: true},
 	{Name: "MODEL_PATH", Kind: KindPath, Help: "Absolute path to the GGUF model file.", Flag: "-m", Restart: "llama-coder"},
-	{Name: "ALIAS", Kind: KindString, Help: "Model id llama-server reports and Qwen Code requests. Also the Qwen provider id.", Flag: "--alias", Syncs: true, Restart: "llama-coder and qwen-local"},
-	{Name: "CTX", Kind: KindInt, Min: 2048, Max: 1048576, Help: "Context window in tokens, multiple of 256. Mirrored to Qwen's contextWindowSize.", Flag: "-c", Syncs: true, Restart: "llama-coder and qwen-local"},
-	{Name: "PORT", Kind: KindInt, Min: 1024, Max: 65535, Help: "Port llama-server listens on and qwen-local connects to.", Flag: "--port", Syncs: true, Restart: "llama-coder and qwen-local"},
+	{Name: "ALIAS", Kind: KindString, Help: "Model id llama-server reports and the harness requests. Also the Qwen provider id.", Flag: "--alias", Syncs: true, Restart: "llama-coder and qwen-local/pi-local"},
+	{Name: "CTX", Kind: KindInt, Min: 2048, Max: 1048576, Help: "Context window in tokens, multiple of 256. Mirrored to the harness settings.", Flag: "-c", Syncs: true, Restart: "llama-coder and qwen-local/pi-local"},
+	{Name: "PORT", Kind: KindInt, Min: 1024, Max: 65535, Help: "Port llama-server listens on and qwen-local or pi-local connects to.", Flag: "--port", Syncs: true, Restart: "llama-coder and qwen-local/pi-local"},
 	{Name: "TEMP", Kind: KindFloat, Min: 0, Max: 2, Default: "0.7", Help: "Sampling temperature.", Flag: "--temp", Restart: "llama-coder"},
 	{Name: "TOP_P", Kind: KindFloat, Min: 0, Max: 1, Default: "0.8", Help: "Nucleus sampling cutoff.", Flag: "--top-p", Restart: "llama-coder"},
 	{Name: "TOP_K", Kind: KindInt, Min: 0, Max: 1000, Default: "20", Help: "Top-k sampling, 0 disables.", Flag: "--top-k", Restart: "llama-coder"},
@@ -134,6 +137,13 @@ func Validate(name, value string) (warn string, err error) {
 			return "", fmt.Errorf("%s must be true or false", name)
 		}
 		return "", nil
+	case KindEnum:
+		for _, c := range k.Choices {
+			if value == c {
+				return "", nil
+			}
+		}
+		return "", fmt.Errorf("%s must be one of %s", name, strings.Join(k.Choices, ", "))
 	case KindArgs:
 		return validateArgs(name, value)
 	}

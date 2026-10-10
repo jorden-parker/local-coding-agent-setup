@@ -8,11 +8,13 @@
 #   3. downloads the Qwen GGUF model for the detected memory profile unless config.env already
 #      points at a model that exists
 #   4. seeds ~/.config/llama-coder/config.env once (never overwritten)
-#   5. installs three binaries to ~/.local/bin:
+#   5. installs these to ~/.local/bin:
 #        llama-coder   -> starts the local model server on http://127.0.0.1:8080
-#        qwen-local    -> runs Qwen Code against that server
-#        lca           -> edits config.env, syncs Qwen Code's provider entry, shows response times
-#   6. runs `lca sync` (Qwen Code's provider entry) and `lca doctor` (verifies the install)
+#        local-harness -> runs an agent harness against that server, with two names:
+#          qwen-local  -> Qwen Code (installed here)
+#          pi-local    -> pi (https://pi.dev; not installed here, bring your own)
+#        lca           -> edits config.env, syncs the harness's provider entry, shows response times
+#   6. runs `lca sync` (the harness provider entries) and `lca doctor` (verifies the install)
 #
 # The model is picked from detected memory:
 #   < 24 GB  -> Qwen3.5-9B UD-Q4_K_XL (6.0 GB), CTX=65536
@@ -154,6 +156,9 @@ mkdir -p "$BIN_DIR" "$CONFIG_DIR"
 WANT_CONFIG=$(cat <<CFG
 # llama-coder configuration. Created by setup.sh.
 # Edit with \`lca config\` (validated) or by hand. CTX= and PORT= in the environment override this file.
+# Agent harness lca syncs and reports on by default: qwen (Qwen Code) or pi.
+# qwen-local and pi-local always use their own, whatever this says.
+HARNESS=qwen
 MODEL_PATH=${MODEL_PATH}
 ALIAS=${ALIAS}
 CTX=${CTX}
@@ -191,7 +196,11 @@ source "$CONFIG"
 # --- 5. Launchers + lca ---------------------------------------------------------
 log "Installing launchers to ${BIN_DIR}"
 install -m 755 "$SCRIPT_DIR/launchers/llama-coder" "$BIN_DIR/llama-coder"
-install -m 755 "$SCRIPT_DIR/launchers/qwen-local" "$BIN_DIR/qwen-local"
+install -m 755 "$SCRIPT_DIR/launchers/local-harness" "$BIN_DIR/local-harness"
+# The name the launcher is invoked under picks the harness, so these are links,
+# not copies. -n keeps an existing link from being followed into a directory.
+ln -sfn local-harness "$BIN_DIR/qwen-local"
+ln -sfn local-harness "$BIN_DIR/pi-local"
 
 log "Building ${BIN_DIR}/lca"
 LCA_VERSION=$(git -C "$SCRIPT_DIR" describe --tags --always 2>/dev/null || echo dev)
@@ -202,6 +211,12 @@ LCA_VERSION=$(git -C "$SCRIPT_DIR" describe --tags --always 2>/dev/null || echo 
 # without it, compaction triggers early. lca sync also selects the model and lean defaults.
 log "Preparing lean ${QWEN_SETTINGS} (provider ${ALIAS}, contextWindowSize ${CTX})"
 "$BIN_DIR/lca" sync
+
+# pi is never installed from here; it has no Homebrew formula and manages its
+# own updates with `pi update`.
+if command -v pi >/dev/null 2>&1; then
+  log "pi $(pi --version 2>/dev/null) found: run pi-local, or 'lca config set HARNESS pi' to make it lca's default"
+fi
 
 log "Checking the install (lca doctor)"
 DOCTOR_OK=1
@@ -232,6 +247,7 @@ cat <<MSG
 
 Next steps:
   cd <your-project> && qwen-local      (starts llama-server itself and stops it on exit)
+  cd <your-project> && pi-local        (the same, running pi instead; install pi yourself)
   or run llama-coder first to watch the server in its own terminal
 
 Profile: ${MEM_GB} GB detected (${PROFILE})
@@ -241,6 +257,8 @@ Config:  ${CONFIG}
          change with: lca config set CTX 65536   (or just: lca)
          one-off:     CTX=65536 llama-coder
 Qwen:    ${QWEN_SETTINGS} uses lean defaults and model ${ALIAS} with contextWindowSize ${CTX}
+pi:      optional; install with: curl -fsSL https://pi.dev/install.sh | sh
+         pi-local then writes ${CONFIG_DIR}/pi/models.json and runs pi against the same server
 Timing:  server logs in ${XDG_STATE_HOME:-$HOME/.local/state}/llama-coder; review with: lca stats
 Update:  re-run ./setup.sh (pulls this repo, upgrades packages, rebuilds lca, keeps config.env)
 Check:                    lca doctor

@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jorden-parker/local-coding-agent-setup/internal/qwen"
 	"github.com/jorden-parker/local-coding-agent-setup/internal/server"
+	"github.com/jorden-parker/local-coding-agent-setup/internal/usage"
 )
 
 // Bucket summarises one day of one model.
@@ -32,9 +32,9 @@ type sample struct {
 	hasServerTP bool
 }
 
-// FromQwen buckets Qwen Code usage records by localDate and model. Latency
+// FromUsage buckets harness usage records by localDate and model. Latency
 // is apiDurationMs; tokens are input and output.
-func FromQwen(recs []qwen.Record) []Bucket {
+func FromUsage(recs []usage.Record) []Bucket {
 	groups := map[[2]string][]sample{}
 	for _, r := range recs {
 		k := [2]string{r.LocalDate, r.Model}

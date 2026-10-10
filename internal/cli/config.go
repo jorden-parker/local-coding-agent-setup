@@ -45,7 +45,7 @@ func configCmd() *cobra.Command {
 			},
 		},
 		&cobra.Command{
-			Use: "set KEY VALUE", Short: "Validate and write one value; ALIAS, PORT and CTX also update Qwen Code",
+			Use: "set KEY VALUE", Short: "Validate and write one value; ALIAS, PORT and CTX also update the harness settings",
 			// Values such as EXTRA_ARGS "--jinja" start with dashes, so flags are not parsed.
 			DisableFlagParsing: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
@@ -104,10 +104,12 @@ func configCmd() *cobra.Command {
 				if len(errs) > 0 {
 					return fmt.Errorf("%d problem(s) in %s", len(errs), paths.Tildify(f.Path))
 				}
-				if _, changed, err := app.SyncQwen(f); err != nil {
+				synced, err := app.SyncAll(f)
+				if err != nil {
 					return err
-				} else if changed {
-					fmt.Println("Updated", paths.Tildify(paths.QwenSettings()))
+				}
+				for _, path := range synced {
+					fmt.Println("Updated", paths.Tildify(path))
 				}
 				return nil
 			},
@@ -145,11 +147,18 @@ func showConfig() error {
 }
 
 func syncCmd() *cobra.Command {
-	var port, ctx string
+	var port, ctx, harness string
 	c := &cobra.Command{
 		Use:   "sync",
-		Short: "Prepare the local Qwen model, provider and lean settings",
-		Args:  cobra.NoArgs,
+		Short: "Prepare the local model, provider and settings of an agent harness",
+		Long: `Write the configuration an agent harness needs to reach the local
+llama-server: Qwen Code's provider entry and lean settings, pi's models.json
+and default model, or both.
+
+Without --harness, Qwen Code is prepared, and pi too when config.env selects it
+or its managed directory already exists. The launchers pass the harness and the
+port they actually started with.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := app.LoadConfig()
 			if err != nil {
@@ -157,7 +166,7 @@ func syncCmd() *cobra.Command {
 			}
 			cfgPort, _ := f.Get("PORT")
 			activePort := cfgPort
-			// Runtime overrides only; config.env is not saved. qwen-local
+			// Runtime overrides only; config.env is not saved. The launcher
 			// passes the PORT= and CTX= it launched with.
 			if cmd.Flags().Changed("port") {
 				f.Set("PORT", port)
@@ -166,19 +175,46 @@ func syncCmd() *cobra.Command {
 			if cmd.Flags().Changed("ctx") {
 				f.Set("CTX", ctx)
 			}
-			p, changed, settingsPath, err := app.SyncQwenAt(f, activePort, cfgPort)
-			if err != nil {
-				return err
+			state := func(changed bool) string {
+				if changed {
+					return "updated"
+				}
+				return "already up to date"
 			}
-			state := "already up to date"
-			if changed {
-				state = "updated"
+			harnesses := []string{harness}
+			if !cmd.Flags().Changed("harness") {
+				// Qwen Code is always installed; pi only once it has been used.
+				harnesses = []string{"qwen"}
+				if app.SyncsPi(f) {
+					harnesses = append(harnesses, "pi")
+				}
 			}
-			fmt.Printf("%s: provider %q → %s, contextWindowSize %d (%s)\n", paths.Tildify(settingsPath), p.ID, p.BaseURL, p.ContextWindow, state)
+			for _, h := range harnesses {
+				switch h {
+				case "pi":
+					p, changed, modelsPath, err := app.SyncPiAt(f, activePort, cfgPort)
+					if err != nil {
+						return err
+					}
+					fmt.Printf("%s: provider %q → %s, model %q, contextWindow %d (%s)\n", paths.Tildify(modelsPath), p.ID, p.BaseURL, p.Model, p.ContextWindow, state(changed))
+				case "qwen":
+					p, changed, shared, settingsPath, err := app.SyncQwenAt(f, activePort, cfgPort)
+					if err != nil {
+						return err
+					}
+					fmt.Printf("%s: provider %q → %s, contextWindowSize %d (%s)\n", paths.Tildify(settingsPath), p.ID, p.BaseURL, p.ContextWindow, state(changed))
+					if activePort == cfgPort {
+						fmt.Printf("%s: provider %q shared with ordinary qwen and the VS Code companion (%s)\n", paths.Tildify(paths.LegacyQwenSettings()), p.ID, state(shared))
+					}
+				default:
+					return fmt.Errorf("--harness must be qwen or pi, not %q", h)
+				}
+			}
 			return nil
 		},
 	}
 	c.Flags().StringVar(&port, "port", "", "Use this server port without changing config.env")
 	c.Flags().StringVar(&ctx, "ctx", "", "Use this context size without changing config.env")
+	c.Flags().StringVar(&harness, "harness", "", "Prepare only this harness: qwen or pi")
 	return c
 }

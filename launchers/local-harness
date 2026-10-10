@@ -1,26 +1,35 @@
 #!/usr/bin/env bash
-# Runs Qwen Code against a local llama-server (OpenAI-compatible /v1 API),
-# starting one when needed. Installed by setup.sh. Reads ALIAS and PORT from
+# Runs an agent harness against a local llama-server (OpenAI-compatible /v1
+# API), starting one when needed. Installed by setup.sh as local-harness with
+# qwen-local and pi-local symlinked to it. Reads ALIAS, PORT and HARNESS from
 # ${XDG_CONFIG_HOME:-~/.config}/llama-coder/config.env.
 #
+# Harness: the name it is invoked under wins (qwen-local -> Qwen Code,
+# pi-local -> pi), then HARNESS= in the environment, then HARNESS in
+# config.env, then qwen. Qwen Code is installed by setup.sh; pi is not, so
+# pi-local fails with an install hint when it is missing.
+#
 # Ports: without PORT= in the environment, the first port from config.env's
-# PORT upward that no other running qwen-local holds is used, so several
-# sessions each get their own llama-server. A server already listening there
-# is used as is (a loading one is waited for); otherwise llama-coder is started
-# in the background and stopped again when this session ends. PORT= pins the
-# port: same rules, except that a port another live qwen-local holds is shared.
-# A server the user started with llama-coder is never stopped. CTX= passes
-# through to a server started here. QWEN_LOCAL_START_TIMEOUT (seconds, default
-# 600) bounds the wait for the model to load.
+# PORT upward that no other running session holds is used, so several sessions
+# each get their own llama-server. A server already listening there is used as
+# is (a loading one is waited for); otherwise llama-coder is started in the
+# background and stopped again when this session ends. PORT= pins the port:
+# same rules, except that a port another live session holds is shared. A server
+# the user started with llama-coder is never stopped. CTX= passes through to a
+# server started here. LOCAL_HARNESS_START_TIMEOUT (seconds, default 600, also
+# honoured under its old name QWEN_LOCAL_START_TIMEOUT) bounds the wait for the
+# model to load.
 #
 # Each session holds ${XDG_STATE_HOME:-~/.local/state}/llama-coder/instances/
 # <port>/ with owner.pid, server.pid (only when it started the server, or
 # adopted one a crashed session left behind), launcher.log (that server's
 # console output) and sharers/<pid>. A port other than config.env's own moves
-# QWEN_HOME to a qwen-<port> sibling directory so sessions never race on Qwen
-# settings. Every such directory's ide/ is a symlink to ~/.qwen/ide (or the
-# ide/ under a QWEN_HOME inherited from the environment), where the VS Code
-# companion extension writes the <port>.lock Qwen Code needs to connect.
+# the harness configuration to a <harness>-<port> sibling directory so sessions
+# never race on shared settings: QWEN_HOME for Qwen Code, PI_CODING_AGENT_DIR
+# for pi. Every Qwen directory's ide/ is a symlink to ~/.qwen/ide (or the ide/
+# under a QWEN_HOME inherited from the environment), where the VS Code
+# companion extension writes the <port>.lock Qwen Code needs to connect; pi has
+# no such companion.
 set -eo pipefail
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder/config.env"
@@ -28,6 +37,13 @@ STATE="${XDG_STATE_HOME:-$HOME/.local/state}/llama-coder"
 INSTANCES="$STATE/instances"
 [[ -f "$CONFIG" ]] || { echo "Missing $CONFIG. Run setup.sh first." >&2; exit 1; }
 
+tag="${0##*/}"
+case "$tag" in
+  qwen-local) harness=qwen ;;
+  pi-local)   harness=pi ;;
+  *)          harness="" ;;
+esac
+env_harness="${HARNESS:-}"
 env_port="${PORT:-}"
 env_ctx="${CTX:-}"
 env_qwen_home="${QWEN_HOME:-}"
@@ -35,21 +51,37 @@ env_qwen_home="${QWEN_HOME:-}"
 source "$CONFIG"
 cfg_port="${PORT:-}"
 [[ -n "$env_ctx" ]] && CTX="$env_ctx"
+[[ -n "$harness" ]] || harness="${env_harness:-${HARNESS:-qwen}}"
+case "$harness" in
+  qwen|pi) ;;
+  *) echo "HARNESS must be qwen or pi, not '$harness'" >&2; exit 1 ;;
+esac
 [[ -n "${ALIAS:-}" && -n "$cfg_port" ]] || { echo "ALIAS and PORT must be set in $CONFIG" >&2; exit 1; }
 [[ "$cfg_port" =~ ^[0-9]+$ ]] || { echo "PORT in $CONFIG must be a number, not '$cfg_port'" >&2; exit 1; }
 [[ -z "$env_port" || "$env_port" =~ ^[0-9]+$ ]] || { echo "PORT must be a number, not '$env_port'" >&2; exit 1; }
-timeout="${QWEN_LOCAL_START_TIMEOUT:-600}"
-[[ "$timeout" =~ ^[0-9]+$ ]] || { echo "QWEN_LOCAL_START_TIMEOUT must be a number of seconds" >&2; exit 1; }
+timeout="${LOCAL_HARNESS_START_TIMEOUT:-${QWEN_LOCAL_START_TIMEOUT:-600}}"
+[[ "$timeout" =~ ^[0-9]+$ ]] || { echo "LOCAL_HARNESS_START_TIMEOUT must be a number of seconds" >&2; exit 1; }
 
 # These settings belong to config.env. Do not let forwarded flags undo them.
 for arg in "$@"; do
   [[ "$arg" == -- ]] && break
-  case "$arg" in
-    -m|-m?*|--model|--model=*|--auth-type|--auth-type=*|--authType|--authType=*|--openai-base-url|--openai-base-url=*|--openaiBaseUrl|--openaiBaseUrl=*|--openai-api-key|--openai-api-key=*|--openaiApiKey|--openaiApiKey=*)
-      echo "qwen-local owns model, auth and endpoint selection. Change ALIAS/PORT with lca config set; remove $arg." >&2
-      exit 1
+  reject=""
+  case "$harness" in
+    qwen)
+      case "$arg" in
+        -m|-m?*|--model|--model=*|--auth-type|--auth-type=*|--authType|--authType=*|--openai-base-url|--openai-base-url=*|--openaiBaseUrl|--openaiBaseUrl=*|--openai-api-key|--openai-api-key=*|--openaiApiKey|--openaiApiKey=*) reject=1 ;;
+      esac
+      ;;
+    pi)
+      case "$arg" in
+        --model|--model=*|--provider|--provider=*|--api-key|--api-key=*) reject=1 ;;
+      esac
       ;;
   esac
+  if [[ -n "$reject" ]]; then
+    echo "$tag owns model, auth and endpoint selection. Change ALIAS/PORT with lca config set; remove $arg." >&2
+    exit 1
+  fi
 done
 command -v lca >/dev/null 2>&1 || { echo "lca is missing. Run setup.sh first." >&2; exit 1; }
 
@@ -70,7 +102,7 @@ pid_alive() { [[ -n "$1" ]] && kill -0 "$1" 2>/dev/null; }
 
 is_llama_server() { [[ "$(ps -o comm= -p "$1" 2>/dev/null)" == *llama-server ]]; }
 
-# True when the qwen-local recorded in $1/owner.pid is still running.
+# True when the session recorded in $1/owner.pid is still running.
 claim_live() {
   local pid
   pid=$(cat "$1/owner.pid" 2>/dev/null) || true
@@ -146,7 +178,7 @@ wait_ready() {
       exit 1
     fi
     if [[ "$waited" -ge "$timeout" ]]; then
-      echo "llama-server on port $1 was not ready after ${timeout}s (QWEN_LOCAL_START_TIMEOUT)" >&2
+      echo "llama-server on port $1 was not ready after ${timeout}s (LOCAL_HARNESS_START_TIMEOUT)" >&2
       exit 1
     fi
     sleep 1
@@ -155,7 +187,7 @@ wait_ready() {
 }
 
 # Runs on every exit, including fatal signals. Stops the server this session
-# started unless another live qwen-local shares it, then drops the claim.
+# started unless another live session shares it, then drops the claim.
 # shellcheck disable=SC2317,SC2329
 cleanup() {
   set +e
@@ -165,7 +197,7 @@ cleanup() {
     for s in "$claim"/sharers/*; do
       [[ -f "$s" ]] || continue
       if pid_alive "${s##*/}"; then
-        echo "qwen-local: leaving llama-server on port ${claim##*/} running for qwen-local pid ${s##*/}" >&2
+        echo "$tag: leaving llama-server on port ${claim##*/} running for pid ${s##*/}" >&2
         return 0
       fi
     done
@@ -217,29 +249,75 @@ else
   [[ -n "$port" ]] || { echo "no free port from $cfg_port upward; set PORT= to pin one" >&2; exit 1; }
 fi
 
-qwen_home_dir="$(dirname -- "$CONFIG")/qwen"
-[[ "$port" != "$cfg_port" ]] && qwen_home_dir="$(dirname -- "$CONFIG")/qwen-${port}"
-export QWEN_HOME="$qwen_home_dir"
-# Qwen Code looks for the IDE companion's lock file in $QWEN_HOME/ide/<port>.lock
-# (Storage.getGlobalIdeDir), but the VS Code extension runs outside this shell
-# and writes it to ~/.qwen/ide. Without the lock file the CLI connects with the
-# port from QWEN_CODE_IDE_SERVER_PORT and no bearer token, and the extension
-# answers 401 Unauthorized. Share the directory instead. An inherited QWEN_HOME
-# is honoured because an editor launched from that shell writes under it too.
-ide_dir="${env_qwen_home:-$HOME/.qwen}/ide"
-ide_link="$qwen_home_dir/ide"
-mkdir -p "$ide_dir" "$qwen_home_dir"
-if [[ -L "$ide_link" ]]; then
-  rm -f "$ide_link"
-  ln -s "$ide_dir" "$ide_link"
-elif [[ -e "$ide_link" ]]; then
-  echo "qwen-local: $ide_link exists and is not a symlink; the IDE companion will not find its lock file in $ide_dir" >&2
-else
-  ln -s "$ide_dir" "$ide_link"
-fi
-unset QWEN_CODE_ENABLE_WORKFLOWS QWEN_CODE_DISABLE_WORKFLOWS QWEN_RUNTIME_DIR
-# A one-off CTX= must reach Qwen's contextWindowSize too, not only the server.
-sync_args=(sync --port "$port")
+# instance_dir echoes the managed configuration directory for this harness:
+# the default one on config.env's own port, an isolated sibling otherwise.
+instance_dir() {
+  local base
+  base="$(dirname -- "$CONFIG")/$1"
+  [[ "$port" != "$cfg_port" ]] && base="$base-${port}"
+  printf '%s' "$base"
+}
+
+prepare_qwen() {
+  local qwen_home_dir ide_dir ide_link
+  qwen_home_dir="$(instance_dir qwen)"
+  export QWEN_HOME="$qwen_home_dir"
+  # Qwen Code looks for the IDE companion's lock file in $QWEN_HOME/ide/<port>.lock
+  # (Storage.getGlobalIdeDir), but the VS Code extension runs outside this shell
+  # and writes it to ~/.qwen/ide. Without the lock file the CLI connects with the
+  # port from QWEN_CODE_IDE_SERVER_PORT and no bearer token, and the extension
+  # answers 401 Unauthorized. Share the directory instead. An inherited QWEN_HOME
+  # is honoured because an editor launched from that shell writes under it too.
+  ide_dir="${env_qwen_home:-$HOME/.qwen}/ide"
+  ide_link="$qwen_home_dir/ide"
+  mkdir -p "$ide_dir" "$qwen_home_dir"
+  if [[ -L "$ide_link" ]]; then
+    rm -f "$ide_link"
+    ln -s "$ide_dir" "$ide_link"
+  elif [[ -e "$ide_link" ]]; then
+    echo "$tag: $ide_link exists and is not a symlink; the IDE companion will not find its lock file in $ide_dir" >&2
+  else
+    ln -s "$ide_dir" "$ide_link"
+  fi
+  unset QWEN_CODE_ENABLE_WORKFLOWS QWEN_CODE_DISABLE_WORKFLOWS QWEN_RUNTIME_DIR
+}
+
+prepare_pi() {
+  command -v pi >/dev/null 2>&1 || {
+    echo "pi is not installed. Install it with: curl -fsSL https://pi.dev/install.sh | sh" >&2
+    exit 1
+  }
+  # pi keeps models.json, settings.json and its sessions in one agent
+  # directory. The managed one is separate from the user's own ~/.pi/agent, so
+  # a local-model session never rewrites their model selection; lca stats reads
+  # the sessions from here. An inherited session directory would move them out
+  # of reach again.
+  PI_CODING_AGENT_DIR="$(instance_dir pi)"
+  export PI_CODING_AGENT_DIR
+  mkdir -p "$PI_CODING_AGENT_DIR"
+  unset PI_CODING_AGENT_SESSION_DIR
+}
+
+exec_qwen() {
+  export OPENAI_BASE_URL="http://127.0.0.1:${port}/v1"
+  export OPENAI_API_KEY="local"
+  export OPENAI_MODEL="$ALIAS"
+  qwen --auth-type openai --model "$ALIAS" \
+    --openai-base-url "$OPENAI_BASE_URL" --openai-api-key "$OPENAI_API_KEY" "$@"
+}
+
+exec_pi() {
+  # llama-local is the provider id lca sync writes into models.json
+  # (internal/pi.ProviderID); the model id is ALIAS.
+  pi --provider llama-local --model "$ALIAS" "$@"
+}
+
+case "$harness" in
+  qwen) prepare_qwen ;;
+  pi) prepare_pi ;;
+esac
+# A one-off CTX= must reach the harness's context window too, not only the server.
+sync_args=(sync --harness "$harness" --port "$port")
 [[ -n "$env_ctx" ]] && sync_args+=(--ctx "$env_ctx")
 lca "${sync_args[@]}" >/dev/null
 
@@ -248,19 +326,20 @@ if [[ "$mode" == own && "$(probe "$port")" == 000 ]]; then
 fi
 wait_ready "$port"
 if [[ -n "$server_pid" && -z "$inherited" ]]; then
-  echo "qwen-local: port $port, started llama-server pid $server_pid: $(head -n 1 "$claim/launcher.log")" >&2
+  echo "$tag: port $port, started llama-server pid $server_pid: $(head -n 1 "$claim/launcher.log")" >&2
 elif [[ -n "$inherited" ]]; then
-  echo "qwen-local: port $port, adopted llama-server pid $server_pid left by an earlier session; it stops when this one ends" >&2
+  echo "$tag: port $port, adopted llama-server pid $server_pid left by an earlier session; it stops when this one ends" >&2
 elif [[ "$mode" == share ]]; then
-  echo "qwen-local: port $port, sharing the llama-server held by qwen-local pid $(cat "$INSTANCES/$port/owner.pid" 2>/dev/null)" >&2
+  echo "$tag: port $port, sharing the llama-server held by pid $(cat "$INSTANCES/$port/owner.pid" 2>/dev/null)" >&2
 else
-  echo "qwen-local: port $port, using the llama-server already running there" >&2
+  echo "$tag: port $port, using the llama-server already running there" >&2
 fi
 
-export OPENAI_BASE_URL="http://127.0.0.1:${port}/v1"
-export OPENAI_API_KEY="local"
-export OPENAI_MODEL="$ALIAS"
+# The harness runs as a foreground child, not exec, so the EXIT trap still
+# stops a server this session started. A & child would ignore SIGINT.
 status=0
-qwen --auth-type openai --model "$ALIAS" \
-  --openai-base-url "$OPENAI_BASE_URL" --openai-api-key "$OPENAI_API_KEY" "$@" || status=$?
+case "$harness" in
+  qwen) exec_qwen "$@" || status=$? ;;
+  pi) exec_pi "$@" || status=$? ;;
+esac
 exit "$status"

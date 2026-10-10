@@ -38,20 +38,32 @@ func StateDir() string {
 // Timings is the compacted per-request timing file.
 func Timings() string { return filepath.Join(StateDir(), "timings.jsonl") }
 
+// instanceDir is <ConfigDir>/<prefix> when port matches cfgPort (config.env's
+// own PORT), or an isolated "<prefix>-<port>" sibling otherwise. A second
+// llama-coder/harness pair started on a different port then never shares
+// mutable harness state, and races on the same settings file, with the default
+// instance.
+func instanceDir(prefix, port, cfgPort string) string {
+	if port == "" || port == cfgPort {
+		return filepath.Join(ConfigDir(), prefix)
+	}
+	return filepath.Join(ConfigDir(), prefix+"-"+port)
+}
+
+// instanceDirs lists the default instance directory, every <prefix>-<port>
+// sibling (sorted by name) and finally legacy, each suffixed with leaf.
+func instanceDirs(prefix, leaf, legacy string) []string {
+	dirs := []string{filepath.Join(ConfigDir(), prefix, leaf)}
+	extra, _ := filepath.Glob(filepath.Join(ConfigDir(), prefix+"-*", leaf))
+	dirs = append(dirs, extra...)
+	return append(dirs, legacy)
+}
+
 // QwenDir holds the managed qwen-local configuration, independent of QWEN_HOME.
 func QwenDir() string { return filepath.Join(ConfigDir(), "qwen") }
 
-// QwenInstanceDir is QwenDir() when port matches cfgPort (config.env's own
-// PORT), or an isolated "qwen-<port>" sibling otherwise. A second
-// llama-coder/qwen-local pair started on a different port then never shares
-// mutable Qwen state, and races on the same settings file, with the default
-// instance.
-func QwenInstanceDir(port, cfgPort string) string {
-	if port == "" || port == cfgPort {
-		return QwenDir()
-	}
-	return filepath.Join(ConfigDir(), "qwen-"+port)
-}
+// QwenInstanceDir is the managed Qwen directory for port.
+func QwenInstanceDir(port, cfgPort string) string { return instanceDir("qwen", port, cfgPort) }
 
 // QwenSettings is the managed qwen-local settings file.
 func QwenSettings() string { return filepath.Join(QwenDir(), "settings.json") }
@@ -68,12 +80,7 @@ func QwenUsageDir() string { return filepath.Join(QwenDir(), "usage") }
 // default instance's, every qwen-<port> instance qwen-local has created
 // (sorted by name), then the legacy ~/.qwen one. Earlier entries win for
 // duplicate record IDs.
-func QwenUsageDirs() []string {
-	dirs := []string{QwenUsageDir()}
-	extra, _ := filepath.Glob(filepath.Join(ConfigDir(), "qwen-*", "usage"))
-	dirs = append(dirs, extra...)
-	return append(dirs, LegacyQwenUsageDir())
-}
+func QwenUsageDirs() []string { return instanceDirs("qwen", "usage", LegacyQwenUsageDir()) }
 
 // LegacyQwenDir holds ordinary Qwen settings and historical usage.
 func LegacyQwenDir() string { return filepath.Join(home(), ".qwen") }
@@ -81,6 +88,41 @@ func LegacyQwenDir() string { return filepath.Join(home(), ".qwen") }
 func LegacyQwenSettings() string { return filepath.Join(LegacyQwenDir(), "settings.json") }
 
 func LegacyQwenUsageDir() string { return filepath.Join(LegacyQwenDir(), "usage") }
+
+// PiDir holds the managed pi-local agent directory, which pi-local points
+// PI_CODING_AGENT_DIR at. It is separate from the user's own ~/.pi/agent.
+func PiDir() string { return filepath.Join(ConfigDir(), "pi") }
+
+// PiInstanceDir is the managed pi agent directory for port.
+func PiInstanceDir(port, cfgPort string) string { return instanceDir("pi", port, cfgPort) }
+
+// PiModels is pi's models.json in the default instance.
+func PiModels() string { return filepath.Join(PiDir(), "models.json") }
+
+// PiModelsFor is pi's models.json in PiInstanceDir(port, cfgPort).
+func PiModelsFor(port, cfgPort string) string {
+	return filepath.Join(PiInstanceDir(port, cfgPort), "models.json")
+}
+
+// PiSettings is pi's settings.json in the default instance.
+func PiSettings() string { return filepath.Join(PiDir(), "settings.json") }
+
+// PiSettingsFor is pi's settings.json in PiInstanceDir(port, cfgPort).
+func PiSettingsFor(port, cfgPort string) string {
+	return filepath.Join(PiInstanceDir(port, cfgPort), "settings.json")
+}
+
+// PiSessionDirs lists every directory lca stats reads pi sessions from: the
+// default instance's, every pi-<port> instance pi-local has created (sorted by
+// name), then the user's own ~/.pi/agent one. Earlier entries win for
+// duplicate entry IDs.
+func PiSessionDirs() []string { return instanceDirs("pi", "sessions", LegacyPiSessionDir()) }
+
+// LegacyPiDir is pi's own agent directory, used when pi runs outside pi-local.
+func LegacyPiDir() string { return filepath.Join(home(), ".pi", "agent") }
+
+// LegacyPiSessionDir holds the sessions of pi runs outside pi-local.
+func LegacyPiSessionDir() string { return filepath.Join(LegacyPiDir(), "sessions") }
 
 // BinDir is ~/.local/bin, where setup.sh installs the launchers and lca.
 func BinDir() string { return filepath.Join(home(), ".local", "bin") }

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jorden-parker/local-coding-agent-setup/internal/qwen"
 	"github.com/jorden-parker/local-coding-agent-setup/internal/server"
+	"github.com/jorden-parker/local-coding-agent-setup/internal/usage"
 )
 
 func TestPercentile(t *testing.T) {
@@ -49,13 +49,13 @@ func TestFromServerWeightsTokens(t *testing.T) {
 	}
 }
 
-func TestFromQwenBucketsByDayAndModel(t *testing.T) {
-	recs := []qwen.Record{
+func TestFromUsageBucketsByDayAndModel(t *testing.T) {
+	recs := []usage.Record{
 		{LocalDate: "2026-10-08", Model: "a", APIDurationMs: 100, InputTokens: 1, OutputTokens: 2},
 		{LocalDate: "2026-10-08", Model: "b", APIDurationMs: 200},
 		{LocalDate: "2026-10-07", Model: "a", APIDurationMs: 300},
 	}
-	bs := FromQwen(recs)
+	bs := FromUsage(recs)
 	if len(bs) != 3 || bs[0].Day != "2026-10-07" || bs[1].Model != "a" || bs[2].Model != "b" {
 		t.Fatalf("%+v", bs)
 	}

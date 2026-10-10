@@ -1,4 +1,5 @@
-// Package qwen reads Qwen Code's settings.json and usage statistics.
+// Package qwen reads and writes Qwen Code's settings.json. Its usage records
+// are read by internal/usage, which both harnesses share.
 package qwen
 
 import (

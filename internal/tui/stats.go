@@ -42,7 +42,7 @@ type statsScreen struct {
 
 func newStatsScreen() statsScreen {
 	t := table.New(table.WithFocused(true))
-	return statsScreen{src: app.SourceQwen, table: t}
+	return statsScreen{src: app.HarnessSource(), table: t}
 }
 
 func loadStats() tea.Msg {
@@ -61,12 +61,12 @@ func (s *statsScreen) buckets() []stats.Bucket {
 	if s.src == app.SourceServer {
 		return s.data.Server
 	}
-	return s.data.Qwen
+	return s.data.Harness
 }
 
 func (s *statsScreen) toggle() {
 	if s.src == app.SourceServer {
-		s.src = app.SourceQwen
+		s.src = app.HarnessSource()
 	} else {
 		s.src = app.SourceServer
 	}
@@ -107,7 +107,7 @@ func (s *statsScreen) setStyles(st styles) {
 
 func (s *statsScreen) view(st styles, width int) string {
 	var b strings.Builder
-	src := "Qwen Code API calls (apiDurationMs) from " + app.UsageSources()
+	src := s.data.Source.Label() + " API calls (apiDurationMs) from " + app.UsageSources(s.data.Source)
 	if s.src == app.SourceServer {
 		src = "llama-server requests (total time) from " + paths.Tildify(paths.Timings())
 	}
@@ -118,7 +118,7 @@ func (s *statsScreen) view(st styles, width int) string {
 	case !s.loaded:
 		b.WriteString(st.subtle.Render("loading…") + "\n")
 	case len(s.buckets()) == 0:
-		b.WriteString(st.subtle.Render("no data yet. Run llama-coder and qwen-local, then press r.") + "\n")
+		b.WriteString(st.subtle.Render("no data yet. Run llama-coder and qwen-local or pi-local, then press r.") + "\n")
 	default:
 		b.WriteString(s.table.View() + "\n")
 		days, vals := stats.DailyP50(s.buckets())

@@ -22,7 +22,7 @@ func statsCmd() *cobra.Command {
 	var asJSON, raw bool
 	c := &cobra.Command{
 		Use:   "stats",
-		Short: "Response times per day from Qwen Code's usage log and llama-server's timings",
+		Short: "Response times per day from the harness's usage records and llama-server's timings",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			src, err := app.ParseSource(source)
 			if err != nil {
@@ -36,23 +36,23 @@ func statsCmd() *cobra.Command {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				if raw {
-					return enc.Encode(map[string]any{"qwen": s.QwenRaw, "server": s.ServerRaw})
+					return enc.Encode(map[string]any{string(s.Source): s.HarnessRaw, "server": s.ServerRaw})
 				}
-				return enc.Encode(map[string]any{"qwen": s.Qwen, "server": s.Server})
+				return enc.Encode(map[string]any{string(s.Source): s.Harness, "server": s.Server})
 			}
 			if raw {
 				printRaw(s)
 				return nil
 			}
 			if src != app.SourceServer {
-				fmt.Printf("Qwen Code API calls (apiDurationMs), last %d days, from %s\n", days, app.UsageSources())
-				printBuckets(s.Qwen, false)
+				fmt.Printf("%s API calls (apiDurationMs), last %d days, from %s\n", s.Source.Label(), days, app.UsageSources(s.Source))
+				printBuckets(s.Harness, false)
 				if s.Skipped > 0 {
 					fmt.Printf("(%d malformed or unsupported lines skipped)\n", s.Skipped)
 				}
 				fmt.Println()
 			}
-			if src != app.SourceQwen {
+			if src == app.SourceServer || src == app.SourceBoth {
 				fmt.Printf("llama-server requests (total time), last %d days, from %s\n", days, paths.Tildify(paths.Timings()))
 				printBuckets(s.Server, true)
 				fmt.Println()
@@ -65,7 +65,7 @@ func statsCmd() *cobra.Command {
 	}
 	c.Flags().IntVar(&days, "days", 14, "how many days back to look")
 	c.Flags().StringVar(&model, "model", "", "only this model / alias")
-	c.Flags().StringVar(&source, "source", "both", "qwen | server | both")
+	c.Flags().StringVar(&source, "source", "both", "qwen | pi | server | both (both pairs the server with config.env's HARNESS)")
 	c.Flags().BoolVar(&asJSON, "json", false, "print JSON instead of tables")
 	c.Flags().BoolVar(&raw, "raw", false, "print every request instead of daily buckets")
 	return c
@@ -96,10 +96,10 @@ func printBuckets(bs []stats.Bucket, tps bool) {
 
 func printRaw(s app.Stats) {
 	w := tabwriter.NewWriter(os.Stdout, 2, 2, 2, ' ', 0)
-	if len(s.QwenRaw) > 0 {
+	if len(s.HarnessRaw) > 0 {
 		fmt.Fprintln(w, "source\ttime\tmodel\tcaller\tin\tout\tcached\tduration")
-		for _, r := range s.QwenRaw {
-			fmt.Fprintf(w, "qwen\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n", r.Timestamp.Local().Format("2006-01-02 15:04:05"), r.Model, r.Source, r.InputTokens, r.OutputTokens, r.CachedTokens, app.FormatMs(r.APIDurationMs))
+		for _, r := range s.HarnessRaw {
+			fmt.Fprintf(w, string(s.Source)+"\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n", r.Timestamp.Local().Format("2006-01-02 15:04:05"), r.Model, r.Source, r.InputTokens, r.OutputTokens, r.CachedTokens, app.FormatMs(r.APIDurationMs))
 		}
 	}
 	if len(s.ServerRaw) > 0 {

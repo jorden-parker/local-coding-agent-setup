@@ -105,7 +105,7 @@ func TestLauncherRejectsDuplicateCacheFlags(t *testing.T) {
 	}
 }
 
-// Stubs for qwen-local. curl answers /health with HEALTH_CODE (default 200),
+// Stubs for the harness launcher. curl answers /health with HEALTH_CODE (default 200),
 // then HEALTH_THEN for every probe after the first, and 200 once the
 // llama-coder stub has started. llama-coder records PORT, its pid and CTX,
 // exits with LLAMA_EXIT when set, and otherwise execs sleep so TERM stops it
@@ -127,6 +127,11 @@ echo "llama-server: stub port $PORT" >&2
 : > "$CAPTURE.server-started"
 exec sleep 300
 `
+	piStub = `#!/bin/bash
+printf '%s\n' "$@" > "$CAPTURE.args"
+printf '%s\n' "$PI_CODING_AGENT_DIR" "${PI_CODING_AGENT_SESSION_DIR-unset}" > "$CAPTURE.env"
+exit 0
+`
 	qwenStub = `#!/bin/bash
 printf '%s\n' "$@" > "$CAPTURE.args"
 printf '%s\n' "$QWEN_HOME" "$OPENAI_MODEL" "$OPENAI_BASE_URL" "$OPENAI_API_KEY" "${QWEN_CODE_ENABLE_WORKFLOWS-unset}" "${QWEN_CODE_DISABLE_WORKFLOWS-unset}" "${QWEN_RUNTIME_DIR-unset}" > "$CAPTURE.env"
@@ -139,6 +144,15 @@ exit 0
 )
 
 func qwenLauncherFixture(t *testing.T) (string, string) {
+	t.Helper()
+	return harnessLauncherFixture(t, "qwen-local")
+}
+
+// harnessLauncherFixture prepares a sandboxed HOME, stubs and config.env, and
+// returns a path to launchers/local-harness under the given name: the name the
+// launcher is invoked under is what selects the harness, so the test must go
+// through a link just as the installed qwen-local and pi-local do.
+func harnessLauncherFixture(t *testing.T, as string) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
@@ -165,20 +179,25 @@ func qwenLauncherFixture(t *testing.T) (string, string) {
 		"lca":         "#!/bin/bash\nprintf '%s\\n' \"$@\" > \"$CAPTURE.sync\"\nexit ${SYNC_EXIT:-0}\n",
 		"llama-coder": llamaCoderStub,
 		"qwen":        qwenStub,
+		"pi":          piStub,
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	_, file, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(file), "../../launchers/qwen-local"), filepath.Join(dir, "capture")
+	launcher := filepath.Join(dir, as)
+	if err := os.Symlink(filepath.Join(filepath.Dir(file), "../../launchers/local-harness"), launcher); err != nil {
+		t.Fatal(err)
+	}
+	return launcher, filepath.Join(dir, "capture")
 }
 
 func instancesDir() string {
 	return filepath.Join(os.Getenv("XDG_STATE_HOME"), "llama-coder", "instances")
 }
 
-// writeClaim records pid as the owner of port, as a running qwen-local would.
+// writeClaim records pid as the owner of port, as a running launcher would.
 func writeClaim(t *testing.T, port string, pid int) string {
 	t.Helper()
 	dir := filepath.Join(instancesDir(), port)
@@ -191,7 +210,7 @@ func writeClaim(t *testing.T, port string, pid int) string {
 	return dir
 }
 
-// runLauncher runs qwen-local and returns its pid, combined output and error.
+// runLauncher runs the launcher and returns its pid, combined output and error.
 func runLauncher(t *testing.T, launcher string, args ...string) (int, []byte, error) {
 	t.Helper()
 	cmd := exec.Command("/bin/bash", append([]string{launcher}, args...)...)
@@ -244,7 +263,7 @@ func TestQwenLauncherPinsSelectionAndForwardsArguments(t *testing.T) {
 	if env := readCapture(t, capture+".env"); env != want {
 		t.Fatalf("env: %q", env)
 	}
-	if sync := readCapture(t, capture+".sync"); sync != "sync\n--port\n9000\n" {
+	if sync := readCapture(t, capture+".sync"); sync != "sync\n--harness\nqwen\n--port\n9000\n" {
 		t.Fatalf("sync: %q", sync)
 	}
 	if health := readCapture(t, capture+".health"); !strings.Contains(health, "http://127.0.0.1:9000/health") {
@@ -342,7 +361,7 @@ func TestQwenLauncherStartsAndStopsServer(t *testing.T) {
 	if env := readCapture(t, capture+".env"); !strings.Contains(env, "http://127.0.0.1:9000/v1") {
 		t.Fatalf("env: %q", env)
 	}
-	if sync := readCapture(t, capture+".sync"); sync != "sync\n--port\n9000\n--ctx\n4096\n" {
+	if sync := readCapture(t, capture+".sync"); sync != "sync\n--harness\nqwen\n--port\n9000\n--ctx\n4096\n" {
 		t.Fatalf("sync: %q", sync)
 	}
 	if !strings.Contains(string(out), "started llama-server pid "+llama[1]) || !strings.Contains(string(out), "llama-server: stub port 9000") {
@@ -370,7 +389,7 @@ func TestQwenLauncherAutoSkipsLiveClaimAndClearsStaleOne(t *testing.T) {
 	if env := readCapture(t, capture+".env"); env != want {
 		t.Fatalf("env: %q", env)
 	}
-	if sync := readCapture(t, capture+".sync"); sync != "sync\n--port\n8081\n" {
+	if sync := readCapture(t, capture+".sync"); sync != "sync\n--harness\nqwen\n--port\n8081\n" {
 		t.Fatalf("sync: %q", sync)
 	}
 	claims := readCapture(t, capture+".claims")
@@ -444,7 +463,7 @@ func TestQwenLauncherSharesPinnedPort(t *testing.T) {
 	if claims := readCapture(t, capture+".claims"); !strings.Contains(claims, fmt.Sprintf("9000/sharers/%d=%d\n", pid, pid)) {
 		t.Fatalf("claims: %q", claims)
 	}
-	if !strings.Contains(string(out), "sharing the llama-server held by qwen-local pid "+strconv.Itoa(os.Getpid())) {
+	if !strings.Contains(string(out), "sharing the llama-server held by pid "+strconv.Itoa(os.Getpid())) {
 		t.Fatalf("banner: %s", out)
 	}
 	if exists(capture + ".llama") {
@@ -559,4 +578,119 @@ func TestQwenLauncherSharesIdeLockDir(t *testing.T) {
 	if info, err := os.Lstat(defaultLink); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		t.Fatalf("directory replaced: %v %v", info, err)
 	}
+}
+
+func piLauncherFixture(t *testing.T) (string, string) {
+	t.Helper()
+	return harnessLauncherFixture(t, "pi-local")
+}
+
+func TestPiLauncherPinsSelectionAndIsolatesAgentDir(t *testing.T) {
+	launcher, capture := piLauncherFixture(t)
+	t.Setenv("PI_CODING_AGENT_SESSION_DIR", filepath.Join(t.TempDir(), "elsewhere"))
+	_, out, err := runLauncher(t, launcher, "-p", "hello world", "--thinking", "off")
+	if err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	want := "--provider\nllama-local\n--model\nlocal\n-p\nhello world\n--thinking\noff\n"
+	if args := readCapture(t, capture+".args"); args != want {
+		t.Fatalf("args: %q", args)
+	}
+	// config.env's own PORT is 8080; the 9000 override isolates the agent dir.
+	// An inherited session directory would move sessions out of lca stats' reach.
+	want = filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "pi-9000") + "\nunset\n"
+	if env := readCapture(t, capture+".env"); env != want {
+		t.Fatalf("env: %q", env)
+	}
+	if sync := readCapture(t, capture+".sync"); sync != "sync\n--harness\npi\n--port\n9000\n" {
+		t.Fatalf("sync: %q", sync)
+	}
+	if !exists(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "pi-9000")) {
+		t.Fatal("agent directory not created")
+	}
+	if exists(filepath.Join(instancesDir(), "9000")) {
+		t.Fatal("claim left behind")
+	}
+}
+
+func TestPiLauncherSharesDefaultDirWhenPortMatchesConfig(t *testing.T) {
+	launcher, capture := piLauncherFixture(t)
+	t.Setenv("PORT", "8080") // matches config.env's own PORT: no isolation needed.
+	if _, out, err := runLauncher(t, launcher); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	want := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "pi") + "\nunset\n"
+	if env := readCapture(t, capture+".env"); env != want {
+		t.Fatalf("env: %q", env)
+	}
+}
+
+func TestPiLauncherRejectsOwnedFlags(t *testing.T) {
+	for _, arg := range []string{"--provider", "--provider=anthropic", "--model", "--model=opus", "--api-key=secret"} {
+		t.Run(arg, func(t *testing.T) {
+			launcher, capture := piLauncherFixture(t)
+			_, out, err := runLauncher(t, launcher, arg)
+			if err == nil || !strings.Contains(string(out), "lca config set") {
+				t.Fatalf("conflict: %v %s", err, out)
+			}
+			if exists(capture + ".args") {
+				t.Fatal("pi launched")
+			}
+		})
+	}
+	// Only the flags lca owns are rejected; pi's own flags pass through.
+	launcher, capture := piLauncherFixture(t)
+	if _, out, err := runLauncher(t, launcher, "--thinking", "high"); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if args := readCapture(t, capture+".args"); !strings.HasSuffix(args, "--thinking\nhigh\n") {
+		t.Fatalf("args: %q", args)
+	}
+}
+
+func TestPiLauncherExplainsHowToInstallPi(t *testing.T) {
+	launcher, capture := piLauncherFixture(t)
+	if err := os.Remove(filepath.Join(filepath.Dir(launcher), "pi")); err != nil {
+		t.Fatal(err)
+	}
+	_, out, err := runLauncher(t, launcher)
+	if err == nil || !strings.Contains(string(out), "pi.dev/install.sh") {
+		t.Fatalf("missing pi: %v %s", err, out)
+	}
+	if exists(capture + ".sync") {
+		t.Fatal("synced although pi is missing")
+	}
+}
+
+func TestLocalHarnessFollowsConfigAndEnvironment(t *testing.T) {
+	for _, tc := range []struct{ name, config, env, want string }{
+		{"config.env selects pi", "ALIAS=local\nPORT=8080\nCTX=65536\nHARNESS=pi\n", "", "pi"},
+		{"config.env selects qwen", "ALIAS=local\nPORT=8080\nCTX=65536\nHARNESS=qwen\n", "", "qwen"},
+		{"environment wins over config.env", "ALIAS=local\nPORT=8080\nCTX=65536\nHARNESS=qwen\n", "pi", "pi"},
+		{"neither means qwen", "ALIAS=local\nPORT=8080\nCTX=65536\n", "", "qwen"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			launcher, capture := harnessLauncherFixture(t, "local-harness")
+			if tc.env != "" {
+				t.Setenv("HARNESS", tc.env)
+			}
+			if err := os.WriteFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "config.env"), []byte(tc.config), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, out, err := runLauncher(t, launcher); err != nil {
+				t.Fatalf("%v %s", err, out)
+			}
+			if sync := readCapture(t, capture+".sync"); !strings.HasPrefix(sync, "sync\n--harness\n"+tc.want+"\n") {
+				t.Fatalf("sync: %q", sync)
+			}
+		})
+	}
+	t.Run("unknown harness", func(t *testing.T) {
+		launcher, _ := harnessLauncherFixture(t, "local-harness")
+		t.Setenv("HARNESS", "codex")
+		_, out, err := runLauncher(t, launcher)
+		if err == nil || !strings.Contains(string(out), "HARNESS must be qwen or pi") {
+			t.Fatalf("unknown harness: %v %s", err, out)
+		}
+	})
 }
