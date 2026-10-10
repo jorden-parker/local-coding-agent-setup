@@ -4,17 +4,24 @@
 #
 # Every run, in order:
 #   1. fast-forwards this checkout (skipped when it has local changes or no upstream)
-#   2. installs Homebrew if missing, then installs or upgrades llama.cpp, hf, Go and Qwen Code
+#   2. installs Homebrew if missing, then installs or upgrades llama.cpp, hf and Go
 #   3. downloads the Qwen GGUF model for the detected memory profile unless config.env already
 #      points at a model that exists
 #   4. seeds ~/.config/llama-coder/config.env once (never overwritten)
 #   5. installs these to ~/.local/bin:
 #        llama-coder   -> starts the local model server on http://127.0.0.1:8080
 #        local-harness -> runs an agent harness against that server, with two names:
-#          qwen-local  -> Qwen Code (installed here)
-#          pi-local    -> pi (https://pi.dev; not installed here, bring your own)
-#        lca           -> edits config.env, syncs the harness's provider entry, shows response times
-#   6. runs `lca sync` (the harness provider entries) and `lca doctor` (verifies the install)
+#          qwen-local  -> Qwen Code (brew install qwen-code)
+#          pi-local    -> pi (https://pi.dev)
+#        lca           -> edits config.env, patches the harness configuration, shows response times
+#   6. runs `lca sync`, which merges the local provider entry into the configuration each harness
+#      already owns (~/.qwen/settings.json, ~/.pi/agent/models.json), copying each file aside as
+#      <name>.lca-backup-<timestamp>.json before the first change; `lca unsync` reverses it.
+#      On a first install only, also applies the lean Qwen Code profile. Then `lca doctor`.
+#
+# Neither harness is installed here: pi has no Homebrew formula and self-updates with
+# `pi update`, and Qwen Code is yours to install so this script never replaces a harness, or a
+# harness configuration, that it did not create. Install at least one before running an agent.
 #
 # The model is picked from detected memory:
 #   < 24 GB  -> Qwen3.5-9B UD-Q4_K_XL (6.0 GB), CTX=65536
@@ -64,7 +71,8 @@ BIN_DIR="$HOME/.local/bin"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder"
 CONFIG="$CONFIG_DIR/config.env"
-QWEN_SETTINGS="$CONFIG_DIR/qwen/settings.json"
+# lca patches the configuration Qwen Code already owns rather than keeping one.
+QWEN_SETTINGS="${QWEN_HOME:-$HOME/.qwen}/settings.json"
 log "Memory profile: ${PROFILE}"
 if (( MEM_GB < 32 )) && [[ "$MODEL_FILE" == Qwen3.6-35B-A3B-* ]]; then
   echo "Warning: ${MODEL_FILE} needs ~22.4 GB plus context. ${MEM_GB} GB is tight."
@@ -103,8 +111,8 @@ fi
 # is installed.
 INSTALL=()
 UPGRADE=()
-BREW_INSTALLED=$(brew list --formula --versions llama.cpp hf go qwen-code 2>/dev/null | cut -d' ' -f1 || true)
-for pair in llama.cpp:llama-server hf:hf go:go qwen-code:qwen; do
+BREW_INSTALLED=$(brew list --formula --versions llama.cpp hf go 2>/dev/null | cut -d' ' -f1 || true)
+for pair in llama.cpp:llama-server hf:hf go:go; do
   formula="${pair%%:*}"
   binary="${pair##*:}"
   if grep -qx "$formula" <<<"$BREW_INSTALLED"; then
@@ -157,7 +165,7 @@ WANT_CONFIG=$(cat <<CFG
 # llama-coder configuration. Created by setup.sh.
 # Edit with \`lca config\` (validated) or by hand. CTX= and PORT= in the environment override this file.
 # Agent harness lca syncs and reports on by default: qwen (Qwen Code) or pi.
-# qwen-local and pi-local always use their own, whatever this says.
+# qwen-local and pi-local each pick their own from the name they are invoked under.
 HARNESS=qwen
 MODEL_PATH=${MODEL_PATH}
 ALIAS=${ALIAS}
@@ -178,6 +186,8 @@ CTX_CHECKPOINTS=${CTX_CHECKPOINTS}
 EXTRA_ARGS=
 CFG
 )
+# A first run is also the only time the lean profile is applied, further down.
+FRESH_CONFIG=0
 if [[ -f "$CONFIG" ]]; then
   if ! diff -u "$CONFIG" <(printf '%s\n' "$WANT_CONFIG") >/dev/null; then
     log "Keeping existing ${CONFIG}; defaults differ:"
@@ -186,6 +196,7 @@ if [[ -f "$CONFIG" ]]; then
 else
   log "Writing ${CONFIG}"
   printf '%s\n' "$WANT_CONFIG" > "$CONFIG"
+  FRESH_CONFIG=1
 fi
 # Use the user's actual settings from here on; remember what this run downloaded.
 WANT_MODEL_PATH="$MODEL_PATH"
@@ -206,16 +217,39 @@ log "Building ${BIN_DIR}/lca"
 LCA_VERSION=$(git -C "$SCRIPT_DIR" describe --tags --always 2>/dev/null || echo dev)
 (cd "$SCRIPT_DIR" && go build -trimpath -ldflags "-s -w -X main.version=${LCA_VERSION}" -o "$BIN_DIR/lca" ./cmd/lca)
 
-# --- 6. Managed lean Qwen Code configuration, then verify ----------------------------------
+# --- 6. Harnesses, their configuration, then verify ----------------------------------------
+# Neither harness is installed from here. pi has no Homebrew formula and updates itself
+# with `pi update`; Qwen Code is left to the user so that lca never replaces a harness, or
+# its configuration, that it did not install.
+HARNESS_FOUND=0
+if command -v qwen >/dev/null 2>&1; then
+  HARNESS_FOUND=1
+  log "Qwen Code $(qwen --version 2>/dev/null) found"
+else
+  log "Qwen Code not found: install it with 'brew install qwen-code', then re-run this script"
+fi
+if command -v pi >/dev/null 2>&1; then
+  HARNESS_FOUND=1
+  log "pi $(pi --version 2>/dev/null) found: run pi-local, or 'lca config set HARNESS pi' to make it lca's default"
+else
+  log "pi not found (optional): install it with 'curl -fsSL https://pi.dev/install.sh | sh'"
+fi
+if (( ! HARNESS_FOUND )); then
+  echo "Warning: no agent harness is installed, so there is nothing for lca to configure yet." >&2
+fi
+
 # Qwen sizes its context from modelProviders.openai[].generationConfig.contextWindowSize;
-# without it, compaction triggers early. lca sync also selects the model and lean defaults.
-log "Preparing lean ${QWEN_SETTINGS} (provider ${ALIAS}, contextWindowSize ${CTX})"
+# without it, compaction triggers early. lca sync merges only that provider entry into the
+# harness's own configuration, after copying the file aside.
+log "Patching the harness configuration (provider ${ALIAS}, context ${CTX})"
 "$BIN_DIR/lca" sync
 
-# pi is never installed from here; it has no Homebrew formula and manages its
-# own updates with `pi update`.
-if command -v pi >/dev/null 2>&1; then
-  log "pi $(pi --version 2>/dev/null) found: run pi-local, or 'lca config set HARNESS pi' to make it lca's default"
+# Lean is a global Qwen Code setting, so lca sync never writes it: re-running this script
+# must not undo a deliberate `lca qwen-profile restore`. A first install has made no such
+# choice yet, and a local model is what lean exists for.
+if (( FRESH_CONFIG )) && command -v qwen >/dev/null 2>&1; then
+  log "Applying the lean Qwen Code profile (reversible: lca qwen-profile restore)"
+  "$BIN_DIR/lca" qwen-profile lean || echo "Warning: could not apply the lean profile; continuing" >&2
 fi
 
 log "Checking the install (lca doctor)"
@@ -247,8 +281,12 @@ cat <<MSG
 
 Next steps:
   cd <your-project> && qwen-local      (starts llama-server itself and stops it on exit)
-  cd <your-project> && pi-local        (the same, running pi instead; install pi yourself)
+  cd <your-project> && pi-local        (the same, running pi instead)
   or run llama-coder first to watch the server in its own terminal
+
+Install a harness yourself; this script configures them but installs neither:
+  Qwen Code:  brew install qwen-code
+  pi:         curl -fsSL https://pi.dev/install.sh | sh   (then: pi update)
 
 Profile: ${MEM_GB} GB detected (${PROFILE})
 Model:   ${MODEL_PATH}
@@ -256,9 +294,11 @@ Server:  http://127.0.0.1:${PORT}   (context ${CTX} tokens)
 Config:  ${CONFIG}
          change with: lca config set CTX 65536   (or just: lca)
          one-off:     CTX=65536 llama-coder
-Qwen:    ${QWEN_SETTINGS} uses lean defaults and model ${ALIAS} with contextWindowSize ${CTX}
-pi:      optional; install with: curl -fsSL https://pi.dev/install.sh | sh
-         pi-local then writes ${CONFIG_DIR}/pi/models.json and runs pi against the same server
+Qwen:    ${QWEN_SETTINGS} gained provider ${ALIAS} with contextWindowSize ${CTX}
+pi:      pi-local adds the same provider to ${HOME}/.pi/agent/models.json
+Patched: each file is copied to <name>.lca-backup-<timestamp>.json before the first change
+         undo with: lca unsync           (--dry-run first to see what it would remove)
+         lean profile: lca qwen-profile lean | restore
 Timing:  server logs in ${XDG_STATE_HOME:-$HOME/.local/state}/llama-coder; review with: lca stats
 Update:  re-run ./setup.sh (pulls this repo, upgrades packages, rebuilds lca, keeps config.env)
 Check:                    lca doctor

@@ -182,7 +182,7 @@ func metricsCmd() *cobra.Command {
 func doctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Check config, launchers, Qwen settings, state dir and the server",
+		Short: "Check config, launchers, the harness configuration, state dir and the server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checks := app.Doctor()
 			for _, c := range checks {

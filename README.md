@@ -15,11 +15,12 @@ cd local-coding-agent-setup
 
 `./setup.sh` is the only command, for the first install and for every update after it: re-run it
 and it fast-forwards this checkout, upgrades the Homebrew packages, rebuilds `lca`, reinstalls
-the launchers, re-syncs the harness settings and runs `lca doctor`. config.env and downloaded
-models are kept (see [Update](#update)).
+the launchers, re-patches the harness configuration and runs `lca doctor`. config.env and
+downloaded models are kept (see [Update](#update)).
 
-Then `qwen-local` inside your project, or `pi-local` if you have pi installed (setup.sh installs
-Qwen Code but not pi; see [Choosing a harness](#choosing-a-harness)). Either takes the first free
+Install a harness yourself first — setup.sh configures them but installs neither (see
+[Choosing a harness](#choosing-a-harness)). Then `qwen-local` inside your project, or
+`pi-local`. Either takes the first free
 port from config.env's `PORT` upward, starts `llama-coder` there itself when nothing is listening,
 waits for the model to load, and stops that server when it exits. To watch the
 server in its own terminal, run `llama-coder` first; the harness launcher then uses it and leaves
@@ -33,8 +34,8 @@ it running. `lca` (no arguments) opens a small terminal UI for settings and resp
 | Homebrew | official install script (skipped if already installed) |
 | llama.cpp | Homebrew formula `llama.cpp` (upgraded on every run; Qwen3.x needs a recent build) |
 | hf (HuggingFace CLI) | Homebrew formula `hf` (upgraded on every run) |
-| Qwen Code | Homebrew formula `qwen-code` (upgraded on every run; left alone if `qwen` was installed another way) |
 | Go | Homebrew formula `go` (upgraded on every run; left alone if `go` was installed another way); builds `lca` |
+| Qwen Code | **not installed**; install it yourself with `brew install qwen-code` |
 | pi | **not installed**; optional second harness, install it yourself with `curl -fsSL https://pi.dev/install.sh \| sh` and update it with `pi update` |
 | `~/.local/bin/llama-coder` | launcher for llama-server, copied from `launchers/llama-coder` |
 | `~/.local/bin/local-harness` | launcher for an agent harness, copied from `launchers/local-harness` |
@@ -42,8 +43,9 @@ it running. `lca` (no arguments) opens a small terminal UI for settings and resp
 | `~/.local/bin/pi-local` | symlink to `local-harness`; the name selects pi |
 | `~/.local/bin/lca` | Go tool built from `cmd/lca`: config editor, harness sync, response-time stats |
 | `~/.config/llama-coder/config.env` | harness, model, context, port and sampling settings; written once, never overwritten |
-| `~/.config/llama-coder/qwen/settings.json` | dedicated local model/provider configuration with automatic lean defaults |
-| `~/.config/llama-coder/pi/` | dedicated pi agent directory (`models.json`, `settings.json`, sessions), written by `pi-local` |
+| `~/.qwen/settings.json` | *patched, not created*: the local provider entry is merged into Qwen Code's own settings |
+| `~/.pi/agent/models.json` | *patched, not created*: the same, in pi's own models file, once `pi-local` or `lca sync --harness pi` has run |
+| `<harness config>.lca-backup-<timestamp>.json` | one copy of each harness file as it was before lca first changed it, beside it |
 | Model (32 GB+) | `unsloth/Qwen3.6-35B-A3B-GGUF`, file `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (22.4 GB) into `~/models` |
 | Model (16 GB) | `unsloth/Qwen3.5-9B-GGUF`, file `Qwen3.5-9B-UD-Q4_K_XL.gguf` (6.0 GB) into `~/models` |
 
@@ -108,19 +110,28 @@ Both front-runners are supported, and both talk to llama-server's native OpenAI 
 so neither needs the Claude-specific workarounds (attribution header, `--bare`, trimmed system
 prompt) that keep the server's KV cache from being reused.
 
-- **Qwen Code** is the default and the one setup.sh installs (Homebrew formula `qwen-code`). It is
-  Alibaba's own harness for Qwen models, and it is the only one of the two with a VS Code
-  companion integration here. Run it with `qwen-local`.
-- **pi** scored slightly higher overall. setup.sh does not install it, because it has no Homebrew
-  formula; install it yourself with `curl -fsSL https://pi.dev/install.sh | sh` and keep it
-  current with `pi update`. Run it with `pi-local`, which fails with that install hint when pi is
-  missing. This is why a machine with only Qwen Code installed needs no configuration change.
+setup.sh installs **neither** — it configures whichever you have. That is deliberate: lca
+patches the configuration file a harness already owns, so it should not be in the business of
+installing or replacing the harness itself.
 
-`HARNESS` in config.env (`qwen` or `pi`, default `qwen`) only picks what `lca` works on by
-default: which settings `lca sync` and `lca config set` prepare, which checks `lca doctor` runs,
-and which records `lca stats` and the terminal UI show. The launcher you run always wins for that
-session, so `qwen-local` and `pi-local` work whatever `HARNESS` says, and both can run side by
-side. `lca config set HARNESS pi` switches the default.
+- **Qwen Code** is the default. It is Alibaba's own harness for Qwen models, and the only one of
+  the two with a VS Code companion integration here. Install it with `brew install qwen-code`
+  and run it with `qwen-local`.
+- **pi** scored slightly higher overall. It has no Homebrew formula; install it with
+  `curl -fsSL https://pi.dev/install.sh | sh` and keep it current with `pi update`. Run it with
+  `pi-local`.
+
+Each launcher fails with its own install hint when its binary is missing, and `lca doctor` only
+fails over a missing harness that `HARNESS` actually selects — so a machine with just one of them
+installed stays quiet about the other.
+
+`HARNESS` in config.env (`qwen` or `pi`, default `qwen`) picks what `lca` works on by default:
+whose configuration `lca sync`, `lca unsync` and `lca config set` patch, which checks `lca doctor`
+runs, and which records `lca stats` and the terminal UI show. `lca` also keeps in step any harness
+whose configuration already carries the local provider from an earlier sync, whatever `HARNESS`
+says — but it never writes into one you have merely installed. The launcher you run always wins
+for that session, so `qwen-local` and `pi-local` work whatever `HARNESS` says, and both can run
+side by side. `lca config set HARNESS pi` switches the default.
 
 ## Swap to the stronger, slower model
 
@@ -148,13 +159,15 @@ lca config set CTX 65536             # validated; ALIAS, PORT and CTX also prepa
 lca config set HARNESS pi            # which harness lca works on by default
 lca config set EXTRA_ARGS --jinja    # extra llama-server flags
 lca config edit                      # $VISUAL or $EDITOR (else vi), then validate + sync
+lca unsync --dry-run                 # what lca would take back out of the harness configuration
+lca unsync                           # take it out
 lca                                  # the same as a form in the terminal UI (tab 2)
 CTX=32768 llama-coder                # one-off override; PORT works the same way for both launchers
 ```
 
 | Key | llama-server flag | Default | Notes |
 |---|---|---|---|
-| `HARNESS` | none | `qwen` | `qwen` or `pi`; the harness `lca` syncs and reports on by default. `qwen-local` and `pi-local` ignore it |
+| `HARNESS` | none | `qwen` | `qwen` or `pi`; the harness `lca` syncs and reports on by default. `qwen-local` and `pi-local` each pick their own from the name they are invoked under |
 | `MODEL_PATH` | `-m` | from the memory profile | absolute path to an existing `.gguf` |
 | `ALIAS` | `--alias` | `qwen3.5-9b` / `qwen3.6-35b-a3b` | also the Qwen Code provider id, pi's model id and `OPENAI_MODEL` |
 | `CTX` | `-c` | `65536` / `131072` | 2048 to 1048576, multiple of 256; mirrored to Qwen's `contextWindowSize` and pi's `contextWindow` |
@@ -164,71 +177,110 @@ CTX=32768 llama-coder                # one-off override; PORT works the same way
 | `TOP_K` | `--top-k` | `20` | 0 to 1000, 0 disables |
 | `MIN_P` | `--min-p` | `0.0` | 0 to 1 |
 | `PRESENCE_PENALTY` | `--presence-penalty` | `1.5` | -2 to 2; Unsloth recommends 1.5 for Qwen3.x non-thinking |
-| `THINKING` | `--chat-template-kwargs` | `false` | `true` enables reasoning; slower agent turns |
+| `THINKING` | `--chat-template-kwargs` | `false` | `true` enables reasoning; slower agent turns. Also mirrored to pi's model `reasoning` |
 | `CACHE_RAM` | `--cache-ram` | `8192` | host prompt-cache limit in MiB, 0 disables it; range 0–1048576 |
 | `CTX_CHECKPOINTS` | `--ctx-checkpoints` | `32` | recurrent/window state checkpoints per slot; range 0–1024 |
 | `EXTRA_ARGS` | appended | empty | whitespace-separated, no quoting; `lca` rejects flags the keys above own and the launcher's fixed `-fa`, `-ngl`, `-np`, `--host`, `--log-file`, `--log-timestamps`, `--metrics` |
 
 Restart rules: every key except `HARNESS` needs a restart of `llama-coder`. `ALIAS`, `PORT` and
-`CTX` also need a restart of `qwen-local` or `pi-local`, because both harnesses read their
-provider configuration at startup. `HARNESS` only changes what `lca` defaults to and needs no
-restart. `lca config set` prints the hint. setup.sh, `lca sync`, and every `qwen-local` launch on
-config.env's own port prepare `${XDG_CONFIG_HOME:-~/.config}/llama-coder/qwen/settings.json`; a launch on any other port
-prepares `qwen-<port>/settings.json` next to it and points `QWEN_HOME` there. The file's
-provider entry is under `modelProviders.openai[]` with `id` = `ALIAS`, `name` =
-`<ALIAS> (local llama.cpp)`, `baseUrl` =
-`http://127.0.0.1:PORT/v1`, `envKey` = `OPENAI_API_KEY` and `generationConfig.contextWindowSize`
-= `CTX`. Preparation also selects the local model, OpenAI authentication, and lean defaults,
-preserving unrelated settings, and adds `~/.qwen/skills` to `skills.directories` (Qwen Code
-0.21+) so `qwen-local` offers the same user skills as ordinary `qwen`, including anything
-linked there from `~/.agents/skills`; existing entries in that list are kept, and the lean
-profile for ordinary `qwen` never touches it. `~/.agents/skills` itself needs no entry: Qwen
-Code reads it at user level straight from `HOME`, so `QWEN_HOME` pointing at the managed
-directory never hides it. `lca doctor`'s `qwen skills` check counts the skills in all three
-roots, which is how you tell a stale symlink farm in `~/.qwen/skills` from a real gap. `qwen-local` sets `QWEN_HOME` to this dedicated directory and
-passes explicit model, auth, base URL, and API key flags, so saved choices from ordinary `qwen`
-cannot select another model. Each such directory's `ide/` is a symlink to `~/.qwen/ide` (or to `ide/` under a
-`QWEN_HOME` already set in your shell), where the VS Code companion extension writes the
-`<port>.lock` holding its port and auth token; Qwen Code only looks for it under `QWEN_HOME`, and
-without it reports "Error POSTing to endpoint: Unauthorized" when you run `/ide enable`. The link
-is re-pointed on every launch; if `ide/` is already a real directory or file the launcher leaves it
-and warns that the companion will not find its lock file. Ordinary `qwen` is untouched: only
-`~/.qwen/ide` itself is created, and the links live inside the instance directories. Model/auth/endpoint flags passed to `qwen-local` are rejected;
-change `ALIAS` or `PORT` through `lca config set`. `lca doctor` reports provider or lean-setting
-drift for the configured port. If an older config has cache/checkpoint flags in `EXTRA_ARGS`,
-move their values into `CACHE_RAM` / `CTX_CHECKPOINTS` and remove those flags from `EXTRA_ARGS`.
-`lca config set` rejects every owned or fixed flag; the launcher itself only checks the
-cache/checkpoint duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints`, and `--flag=value`
-forms, for configs edited by hand.
+`CTX` also need a restart of `qwen-local` or `pi-local`, and `THINKING` a restart of `pi-local`,
+because both harnesses read their provider configuration at startup. Those four are also the keys
+whose change re-patches the harness configuration. `HARNESS` only changes what `lca` defaults to
+and needs no restart. `lca config set` prints the hint.
+
+### What `lca sync` writes into Qwen Code's settings
+
+setup.sh, `lca sync` and every `qwen-local` launch merge one provider entry into
+`~/.qwen/settings.json` — Qwen Code's own file, or whatever `QWEN_HOME` points at. The entry
+lives under `modelProviders.openai[]`, matched by `id`, and holds `id` = `ALIAS`, `name` =
+`<ALIAS> (local llama.cpp)`, `baseUrl` = `http://127.0.0.1:PORT/v1`, `envKey` =
+`OPENAI_API_KEY` and `generationConfig.contextWindowSize` = `CTX`. Qwen sizes its context from
+that last key; without it compaction triggers far too early.
+
+Two more keys, and nothing else:
+
+- `env.OPENAI_API_KEY` is set to the placeholder `local`, but **only while it is empty**. A real
+  key you have put there is never replaced. llama-server ignores API keys, but Qwen Code
+  refuses an OpenAI-compatible provider without one.
+- `security.auth.selectedType` and `model.name` are set to `openai` and `ALIAS`, but **only
+  while no auth type has been chosen yet**, so a fresh install can run plain `qwen` against the
+  local server straight away. `qwen-local` never depends on this: it passes `--auth-type`,
+  `--model`, `--openai-base-url` and `--openai-api-key` explicitly, which is also why
+  model/auth/endpoint flags passed to `qwen-local` are rejected — change `ALIAS` or `PORT`
+  through `lca config set`.
+
+Every other setting is left exactly as it is. In particular `lca sync` does **not** write the
+lean profile (see [below](#lean-qwen-code-profile)) and adds nothing to `skills.directories`:
+`~/.qwen/skills` and `~/.agents/skills` are both roots Qwen Code resolves from its own home, so
+there is nothing for lca to add. `lca doctor`'s `qwen skills` check counts them separately, which
+is how you tell a stale symlink farm in one from a real gap.
+
+The first time lca changes either harness's configuration it copies the file to
+`<name>.lca-backup-<timestamp>.json` beside it, and never writes a second one. That copy matters
+even for changes lca can undo exactly: merging re-encodes the document, so key order and any
+comments are lost. A settings file that is not strict JSON is refused rather than reformatted —
+remove the comments or trailing commas and run `lca sync` again. `lca unsync` removes the entry
+again; `lca doctor` names the newest backup so it stays findable.
+
+If an older config has cache/checkpoint flags in `EXTRA_ARGS`, move their values into
+`CACHE_RAM` / `CTX_CHECKPOINTS` and remove those flags from `EXTRA_ARGS`. `lca config set`
+rejects every owned or fixed flag; the launcher itself only checks the cache/checkpoint
+duplicates, including `-cram`, `-ctxcp`, `--swa-checkpoints`, and `--flag=value` forms, for
+configs edited by hand.
 
 ### pi's configuration
 
-`pi-local` points `PI_CODING_AGENT_DIR` at `${XDG_CONFIG_HOME:-~/.config}/llama-coder/pi`
-(`pi-<port>` for a session on any other port) and runs
-`pi --provider llama-local --model <ALIAS>`. That managed agent directory is pi's own: it holds
-`models.json`, `settings.json` and the sessions of local runs, so your `~/.pi/agent` — its
-credentials, model selection and session history — is never written to. The cost is that pi's
-extensions, themes and keybindings do not carry over; skills do, because `settings.json` lists
-`~/.pi/agent/skills`, and because pi reads `~/.agents/skills` at user level straight from `HOME`
-— `PI_CODING_AGENT_DIR` does not move that one, and it needs no entry. `lca doctor`'s
-`pi skills` check counts the skills in all three roots, so a `~/.pi/agent/skills` symlink farm
-that an installer left stale is visible rather than mysterious. An inherited
-`PI_CODING_AGENT_SESSION_DIR` is cleared, so sessions stay where `lca stats` can read them.
+`pi-local` runs `pi --provider llama-local --model <ALIAS>` against pi's own agent directory,
+`~/.pi/agent`, or whatever `PI_CODING_AGENT_DIR` points at. Your credentials, extensions,
+themes, keybindings, skills and session history are all where pi already keeps them. An
+inherited `PI_CODING_AGENT_SESSION_DIR` is the one variable that is cleared, because it would
+move the sessions out from under that directory and so out of reach of `lca stats`.
 
-`lca sync --harness pi` writes the provider entry in `models.json`:
-`providers.llama-local` with `name` = `<ALIAS> (local llama.cpp)`, `api` =
-`openai-completions`, `baseUrl` = `http://127.0.0.1:PORT/v1`, `apiKey` = `local` (llama-server
-ignores it, but pi hides a model whose provider has no credential) and one model: `id` = `ALIAS`,
-the same `name`, `input` = `["text"]`, `contextWindow` = `CTX`, `reasoning` = `THINKING`, and
-zeroed `cost` so pi's footer invents no price. `settings.json` gets `defaultProvider`, `defaultModel` and the
-skills directory. Other providers, hand-added models of this provider, and every unrelated
-setting are preserved. `--provider`, `--model` and `--api-key` passed to `pi-local` are rejected;
-change `ALIAS` or `PORT` through `lca config set`.
+`lca sync --harness pi` merges one provider entry into `models.json`: `providers.llama-local`
+with `name` = `<ALIAS> (local llama.cpp)`, `api` = `openai-completions`, `baseUrl` =
+`http://127.0.0.1:PORT/v1`, `apiKey` = `local` (llama-server ignores it, but pi hides a model
+whose provider has no credential) and one model: `id` = `ALIAS`, the same `name`, `input` =
+`["text"]`, `contextWindow` = `CTX`, `reasoning` = `THINKING`, and zeroed `cost` so pi's footer
+invents no price. Other providers, hand-added models of this provider, and every unrelated
+setting are preserved.
+
+pi's `settings.json` is never written. `defaultProvider` and `defaultModel` are your own
+selection, and `pi-local` does not need them — it passes `--provider` and `--model` as flags,
+which is also why those flags and `--api-key` are rejected when you pass them yourself; change
+`ALIAS` or `PORT` through `lca config set`. The same applies to `skills`: `~/.pi/agent/skills`
+and `~/.agents/skills` are roots pi resolves from its own home, so there is nothing to add.
+
+`models.json` is the one file here lca may create from nothing, since `pi update` owns
+`models-store.json` and not this one. When it does, there is no backup beside it — and that
+absence is exactly how `lca unsync` knows it may delete the file outright rather than leave an
+empty shell behind.
 
 pi's own llama.cpp integration (`/login llama.cpp`, `/llama`, `LLAMA_BASE_URL`) is not used: it
 drives llama.cpp's *router* server, which discovers and loads models on demand, while
 `llama-coder` starts a single pinned model per port. The `models.json` route is what pi documents
 for any OpenAI-compatible endpoint.
+
+### Undoing it: `lca unsync`
+
+`lca unsync` takes lca's entries back out and leaves everything else alone. Run it with
+`--dry-run` first to see what it would do; `--harness qwen|pi` limits it to one.
+
+It removes only what it still recognises as its own, and says what it decided to keep:
+
+- the `modelProviders.openai[]` entry for `ALIAS`, while every field lca owns still matches and
+  nothing has been added to it;
+- `env.OPENAI_API_KEY`, only while it is still the `local` placeholder;
+- `security.auth.selectedType` and `model.name`, only while they are still exactly what `lca
+  sync` would have written;
+- pi's `llama-local` model for `ALIAS`, and the provider itself once that leaves it with no
+  models — or the whole file, when lca created it.
+
+What it cannot undo: the key order and formatting the first sync replaced, which is what the
+backup is for; a selection you have changed since, or one you had chosen yourself before lca ran
+— indistinguishable from lca's own write, so it is cleared either way; an entry you have edited,
+which is kept and named; and the lean profile, which `lca qwen-profile restore` reverts. A
+changed `ALIAS` matters too: `unsync` looks for the alias config.env names *now*, so set it back
+first if you synced under another one.
 
 ### Running more than one instance
 
@@ -244,63 +296,66 @@ background and stops it again when the harness exits. A server you started yours
 server it started, `launcher.log` with that server's console output, `sharers/<pid>` for sessions
 sharing a pinned port); claims whose owner has died are cleared, and a server left behind by a
 crashed session is adopted and stopped by the next session on that port. `CTX=` passes through to
-a server started this way and to that instance's context window;
+a server started this way and to the harness's context window for that run;
 `LOCAL_HARNESS_START_TIMEOUT` (seconds, default 600, also honoured under its old name
 `QWEN_LOCAL_START_TIMEOUT`) bounds the wait for the model to load.
 
 `PORT=9000 qwen-local` pins the port instead: same rules, except that a port another running
 session holds is shared. The owner then leaves the server running when it exits, and it keeps
 running after the sharer exits until the next session on that port adopts and stops it. A
-one-off `PORT=9000 llama-coder` still works for starting a server by hand. Because `9000` differs
-from config.env's own `PORT`, that session's harness configuration lands in
-`.../llama-coder/qwen-9000/settings.json` (or `.../llama-coder/pi-9000/` for `pi-local`) rather
-than the shared `qwen/` or `pi/` directory the default port uses, so `lca sync` never races or
-overwrites the default instance's provider entry. The two harnesses are independent: `qwen-local`
-and `pi-local` can hold different ports at the same time. Every
+one-off `PORT=9000 llama-coder` still works for starting a server by hand. The two harnesses are
+independent: `qwen-local` and `pi-local` can hold different ports at the same time. Every
 `llama-server` loads a full copy of the model and serves a single request slot (`-np 1`), so RAM
-bounds how many sessions you can run. `lca doctor` only covers the port configured in config.env;
-`lca stats` reads the usage records of every instance.
+bounds how many sessions you can run. `lca doctor` only covers the port configured in config.env.
+
+One thing to know about concurrent sessions: they share one harness configuration, so the
+provider entry's `baseUrl` is whichever port synced last. For Qwen Code that is cosmetic —
+`qwen-local` passes `--openai-base-url` for its own port, so each session still reaches its own
+server. For pi it is not: pi has no base-URL flag, so `models.json` is the only place it learns
+which port to call, and a second `pi-local` can leave the first pointing at the wrong server.
+Pin `PORT=` in config.env, or run one pi session at a time.
 
 ### VS Code IDE companion
 
-This is Qwen Code only; pi has no companion extension, so `pi-local` creates no `ide/` link.
+This is Qwen Code only; pi has no companion extension.
 
 Qwen Code's IDE integration (open files, cursor and selection as context, edits shown in VS Code's
-diff viewer) works under `qwen-local` too. Install the "Qwen Code Companion" extension
-(`qwenlm.qwen-code-vscode-ide-companion`) from the Extensions view in VS Code; `/ide install`
-inside a session also works, but it uses whichever `code` command is first on `PATH`, which may
-belong to Cursor rather than VS Code. Then open a fresh integrated terminal so it inherits the
-extension's `QWEN_CODE_IDE_SERVER_PORT` and `QWEN_CODE_IDE_WORKSPACE_PATH`, run `qwen-local`
-there and type `/ide enable` (`/ide disable` turns it off). Start sessions from the terminal, not
-from the extension's "Qwen Code: Run" command, which launches plain `qwen` against your default
-provider. The extension writes its lock file to `~/.qwen/ide`, or to `$QWEN_HOME/ide` when `QWEN_HOME`
-was set in the shell that launched the editor; `qwen-local` links each instance directory's `ide/`
-to the same place so Qwen Code finds it (see above).
+diff viewer) works under `qwen-local` too, and needs nothing from lca: the extension writes its
+`<port>.lock` to `~/.qwen/ide` (or `$QWEN_HOME/ide`), which is exactly where Qwen Code looks,
+because `qwen-local` leaves `QWEN_HOME` as your shell set it.
+
+Install the "Qwen Code Companion" extension (`qwenlm.qwen-code-vscode-ide-companion`) from the
+Extensions view in VS Code; `/ide install` inside a session also works, but it uses whichever
+`code` command is first on `PATH`, which may belong to Cursor rather than VS Code. Then open a
+fresh integrated terminal so it inherits the extension's `QWEN_CODE_IDE_SERVER_PORT` and
+`QWEN_CODE_IDE_WORKSPACE_PATH`, run `qwen-local` there and type `/ide enable` (`/ide disable`
+turns it off). Start sessions from the terminal, not from the extension's "Qwen Code: Run"
+command, which launches plain `qwen` against your default provider.
 
 ## Response times
 
 Two sources are captured, and `lca stats` shows both as one table per source (p50, p95, mean,
 token counts per day and model) plus a sparkline of the daily p50. `lca stats --raw` lists every
 request, `--json` is for scripts, `--source qwen|pi|server|both` (default `both`, which pairs the
-server with config.env's `HARNESS`), `--days N` and `--model ALIAS` filter.
+server with config.env's `HARNESS`) and `--days N` select what is counted.
 The terminal UI (`lca`, tab 1) shows the same table and, while the server runs, a live line from
 its `/metrics` endpoint every two seconds (`lca metrics` prints one scrape).
 
-- **Qwen Code** writes one JSON line per API call to
-  `~/.config/llama-coder/qwen/usage/token-usage-YYYY-MM.jsonl` for `qwen-local`
-  (under `XDG_CONFIG_HOME` when set), or `qwen-<port>/usage/` for a session on another port.
-  Stats read every instance's directory, plus legacy `~/.qwen/usage` logs, and
-  deduplicate records by ID, keeping historical calls visible. Each record includes
-  `apiDurationMs`, input/output tokens, model and caller (`main` or a subagent). This is the
-  end-to-end time an agent turn waits for. It is on unless `privacy.usageStatisticsEnabled` is false
-  in the managed Qwen settings; `lca doctor` warns if it is.
+Because the records live in the harness's own directory, mixed in with every other model you run
+it against, stats count **only config.env's `ALIAS`** by default. `--model X` picks another one
+and `--all-models` drops the filter; the table header always says which is in force. Changing
+`ALIAS` therefore hides the older model's history until you ask for it.
+
+- **Qwen Code** writes one JSON line per API call to `~/.qwen/usage/token-usage-YYYY-MM.jsonl`
+  (or under `$QWEN_HOME`). Each record includes `apiDurationMs`, input/output tokens, model and
+  caller (`main` or a subagent). This is the end-to-end time an agent turn waits for. It is on
+  unless `privacy.usageStatisticsEnabled` is false in Qwen's settings; `lca doctor` warns if it is.
 - **pi** keeps no usage log, so `lca stats --source pi` reads its session files
-  (`~/.config/llama-coder/pi/sessions/<project>/*.jsonl`, `pi-<port>/sessions/` for another port,
-  plus your own `~/.pi/agent/sessions`) and derives each turn from them: tokens and cache reads
-  from the assistant message's `usage`, and the response time from the gap between the request
-  line and the answer line, which is the same end-to-end wait. Only `llama-local` turns count, so
-  sessions you ran against a cloud model are ignored; turns that errored or were aborted have no
-  usable duration and are counted as skipped.
+  (`~/.pi/agent/sessions/<project>/*.jsonl`, or under `$PI_CODING_AGENT_DIR`) and derives each
+  turn from them: tokens and cache reads from the assistant message's `usage`, and the response
+  time from the gap between the request line and the answer line, which is the same end-to-end
+  wait. Only `llama-local` turns count, so sessions you ran against a cloud model are ignored;
+  turns that errored or were aborted have no usable duration and are counted as skipped.
 - **llama-server** logs `prompt eval time`, `eval time` and `total time` with tokens per second
   for every request. `llama-coder` passes `--log-file --log-timestamps --metrics`, writing one
   log per launch to `~/.local/state/llama-coder/server-<UTC time>-<ALIAS>.log`. The timestamps are
@@ -313,30 +368,32 @@ not a measurement of generation speed. Use server timings to separate those cost
 
 ## Lean Qwen Code profile
 
-This section is Qwen Code only. pi's managed configuration carries no equivalent profile: it
-selects the local model and shares your skills directory, and leaves pi's other defaults alone.
-
-`qwen-local` automatically uses lean defaults in its dedicated configuration. Run `qwen-local`
-inside your project; it starts the server if needed, and no model picker or profile command is needed.
-Ordinary `qwen` retains its own models, credentials, and settings. Local sessions and runtime
-files use the dedicated Qwen directory; existing ordinary Qwen sessions are not migrated.
-Project instructions, permissions, and deliberate project tool settings retain Qwen’s normal
-precedence. Inherited workflow enable/disable variables and `QWEN_RUNTIME_DIR` are cleared by `qwen-local`.
-
-For **ordinary `qwen` only**, the optional reversible profile commands remain available:
-
-```bash
-lca qwen-profile lean
-# Restart ordinary qwen to apply. qwen-local is already lean.
-lca qwen-profile restore
-```
+This section is Qwen Code only; pi has no equivalent profile.
 
 Lean disables automatic memory extraction, dreaming, automatic skill review, workflows, and
 the `agent` subagent tool. File reading, searching, editing and shell tools remain eager; other
 tools remain discoverable through `tool_search` and `tool_call`. Manual memory commands remain
-available. This reduces background requests and avoids switching a single server slot between
-agent prompts. Local preparation reapplies lean defaults on each launch. The reversible commands above
-apply only to ordinary Qwen settings.
+available. A local model pays for all of those twice: in extra requests to a server with one
+request slot, and in prompt tokens it has few of.
+
+There is one Qwen Code configuration, so lean is a single global choice — it applies to
+`qwen-local` and plain `qwen` alike. `lca sync` never writes these settings, because it runs on
+every launch and would then keep overriding your choice. This command is the only thing that
+does:
+
+```bash
+lca qwen-profile lean
+# Restart qwen to apply.
+lca qwen-profile restore
+```
+
+setup.sh applies lean once, on a first install only — when it has just written config.env. Later
+runs leave it alone, so a deliberate `restore` stays restored. `lca doctor` reports which profile
+is in force as information, never as a failure.
+
+Project instructions, permissions, and deliberate project tool settings keep Qwen's normal
+precedence. Inherited workflow enable/disable variables and `QWEN_RUNTIME_DIR` are cleared by
+`qwen-local`, since they would override both config.env and this profile.
 
 Only affected settings are saved in `~/.qwen/settings.json.lca-lean.json`, before the settings
 file is changed. Existing disabled tools and unrelated settings are preserved. Reapplying lean
@@ -363,10 +420,11 @@ The same command updates an existing install. Each run, in order:
 1. Fast-forwards this checkout with `git pull --ff-only`. Skipped when the checkout has local
    changes or no upstream branch; a failed pull (offline, diverged) is a warning. When new
    commits arrive, setup.sh restarts itself so the rest of the run uses them.
-2. Installs Homebrew if missing, then installs any of `llama.cpp`, `hf`, `go`, `qwen-code` whose
-   command is absent and upgrades the ones Homebrew already manages. A failed upgrade is a
-   warning. A `go` or `qwen` installed some other way is left alone. pi is never installed or
-   upgraded here; it updates itself with `pi update`.
+2. Installs Homebrew if missing, then installs any of `llama.cpp`, `hf`, `go` whose command is
+   absent and upgrades the ones Homebrew already manages. A failed upgrade is a warning. A `go`
+   installed some other way is left alone. Neither harness is installed or upgraded here: pi
+   updates itself with `pi update`, and Qwen Code is yours to install so that setup.sh never
+   replaces a harness, or a harness configuration, it did not create.
 3. Checks the model: if config.env points at a file that exists, nothing is downloaded, so
    updates work offline. If config.env is missing or points at the memory profile's default
    path, the default model is downloaded (skipped when present). If config.env points at a
@@ -375,10 +433,11 @@ The same command updates an existing install. Each run, in order:
 4. Seeds config.env if absent, otherwise keeps it and prints how it differs from the defaults.
 5. Reinstalls the launchers (`llama-coder`, `local-harness` and the `qwen-local` / `pi-local`
    links) and rebuilds `lca` from the checkout.
-6. Runs `lca sync` — Qwen Code always, and pi too when `HARNESS=pi` or pi's managed directory
-   already exists — then `lca doctor`; setup.sh exits non-zero if doctor reports a failure. It
-   also prints a hint when pi is on `PATH`. A missing pi is only a doctor failure when
-   `HARNESS=pi`.
+6. Reports which harnesses are installed, then runs `lca sync` — the harness `HARNESS` selects,
+   plus any whose configuration already carries the local provider. On a first install only, it
+   also applies the lean Qwen Code profile. Finally `lca doctor`; setup.sh exits non-zero if
+   doctor reports a failure. A missing harness is only a doctor failure when `HARNESS` selects
+   it.
 
 A running `llama-server` is never stopped; restart `llama-coder`, `qwen-local` or `pi-local` to
 pick up a new llama.cpp build or launcher.
@@ -463,9 +522,8 @@ The server flags live in `launchers/llama-coder`, installed verbatim to `~/.loca
 - On 32 GB+ with memory pressure: `lca config set CTX 65536` (already the default on 16 GB), or
   `CTX=65536 llama-coder` for one run
 - Compaction triggers early? Qwen Code sizes its context from
-  `modelProviders.openai[].generationConfig.contextWindowSize` in the managed
-  `~/.config/llama-coder/qwen/settings.json`, and pi from the model's `contextWindow` in
-  `~/.config/llama-coder/pi/models.json`.
+  `modelProviders.openai[].generationConfig.contextWindowSize` in `~/.qwen/settings.json`, and
+  pi from the model's `contextWindow` in `~/.pi/agent/models.json`.
   setup.sh and `lca config set CTX` keep both equal to `CTX`; `lca doctor` reports drift, `lca sync` fixes it.
 - Tool calls failing? `lca config set EXTRA_ARGS --jinja`. Recent llama.cpp builds enable it by
   default; harness-bench passed it explicitly.

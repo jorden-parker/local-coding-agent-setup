@@ -41,7 +41,7 @@ type Key struct {
 
 // Keys is the catalogue in file order.
 var Keys = []Key{
-	{Name: "HARNESS", Kind: KindEnum, Choices: []string{"qwen", "pi"}, Default: "qwen", Help: "Agent harness lca syncs and reports on by default: qwen (Qwen Code) or pi. qwen-local and pi-local always use their own.", Syncs: true},
+	{Name: "HARNESS", Kind: KindEnum, Choices: []string{"qwen", "pi"}, Default: "qwen", Help: "Agent harness lca syncs and reports on by default: qwen (Qwen Code) or pi. qwen-local and pi-local each pick their own from the name they are invoked under.", Syncs: true},
 	{Name: "MODEL_PATH", Kind: KindPath, Help: "Absolute path to the GGUF model file.", Flag: "-m", Restart: "llama-coder"},
 	{Name: "ALIAS", Kind: KindString, Help: "Model id llama-server reports and the harness requests. Also the Qwen provider id.", Flag: "--alias", Syncs: true, Restart: "llama-coder and qwen-local/pi-local"},
 	{Name: "CTX", Kind: KindInt, Min: 2048, Max: 1048576, Help: "Context window in tokens, multiple of 256. Mirrored to the harness settings.", Flag: "-c", Syncs: true, Restart: "llama-coder and qwen-local/pi-local"},
@@ -51,7 +51,9 @@ var Keys = []Key{
 	{Name: "TOP_K", Kind: KindInt, Min: 0, Max: 1000, Default: "20", Help: "Top-k sampling, 0 disables.", Flag: "--top-k", Restart: "llama-coder"},
 	{Name: "MIN_P", Kind: KindFloat, Min: 0, Max: 1, Default: "0.0", Help: "Min-p sampling cutoff.", Flag: "--min-p", Restart: "llama-coder"},
 	{Name: "PRESENCE_PENALTY", Kind: KindFloat, Min: -2, Max: 2, Default: "1.5", Help: "Presence penalty; Unsloth recommends 1.5 for Qwen3.x non-thinking.", Flag: "--presence-penalty", Restart: "llama-coder"},
-	{Name: "THINKING", Kind: KindBool, Default: "false", Help: "true enables reasoning via --chat-template-kwargs enable_thinking (slower agent turns).", Flag: "--chat-template-kwargs", Restart: "llama-coder"},
+	// Syncs because pi mirrors it as the model's "reasoning" in models.json;
+	// without that, lca config set THINKING would reach the server but not pi.
+	{Name: "THINKING", Kind: KindBool, Default: "false", Help: "true enables reasoning via --chat-template-kwargs enable_thinking (slower agent turns).", Flag: "--chat-template-kwargs", Syncs: true, Restart: "llama-coder and pi-local"},
 	{Name: "CACHE_RAM", Kind: KindInt, Min: 0, Max: 1048576, Default: "8192", Help: "Host prompt-cache limit in MiB, 0 disables it. Active slot prefix caching remains enabled.", Flag: "--cache-ram", Restart: "llama-coder"},
 	{Name: "CTX_CHECKPOINTS", Kind: KindInt, Min: 0, Max: 1024, Default: "32", Help: "Maximum recurrent/window state checkpoints per slot, 0 disables them.", Flag: "--ctx-checkpoints", Restart: "llama-coder"},
 	{Name: "EXTRA_ARGS", Kind: KindArgs, Help: "Extra llama-server flags, whitespace-separated, no quoting (e.g. --jinja).", Restart: "llama-coder"},

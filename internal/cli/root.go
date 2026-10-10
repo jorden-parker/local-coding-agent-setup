@@ -31,9 +31,13 @@ func Root() *cobra.Command {
 		Use:   name,
 		Short: "Configure the local llama.cpp coding setup and review its response times",
 		Long: name + ` edits ~/.config/llama-coder/config.env (the file the llama-coder,
-qwen-local and pi-local launchers read), prepares a dedicated configuration for
-the agent harness that config.env selects (Qwen Code or pi), and summarises
-response times from that harness's records and llama-server's timing lines.
+qwen-local and pi-local launchers read), merges the local server's provider entry
+into the configuration the agent harness already owns (Qwen Code's
+~/.qwen/settings.json or pi's ~/.pi/agent/models.json), and summarises response
+times from that harness's records and llama-server's timing lines.
+
+It writes only the keys it needs, copies each file aside before the first change,
+and takes the entry back out again with unsync.
 
 Run with no arguments to open the interactive UI.`,
 		SilenceUsage: true,
