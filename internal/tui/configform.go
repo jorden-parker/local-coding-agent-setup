@@ -54,7 +54,7 @@ func newConfigScreen(isDark bool, width, height int) configScreen {
 		}
 	}
 	fields = append(fields, huh.NewConfirm().Key("save").Title("Write "+paths.Tildify(f.Path)+"?").
-		Description("ALIAS, PORT and CTX are mirrored into the harness settings lca manages.").
+		Description("ALIAS, PORT, CTX and THINKING are also merged into the harness's own configuration.").
 		Affirmative("Save").Negative("Discard").Value(&c.save))
 	km := huh.NewDefaultKeyMap()
 	km.Quit = key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "cancel"))

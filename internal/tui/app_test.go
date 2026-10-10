@@ -91,9 +91,14 @@ func TestConfigEscWritesNothing(t *testing.T) {
 	if string(before) != string(after) {
 		t.Error("config.env changed")
 	}
-	for _, settings := range []string{filepath.Join(home, ".qwen", "settings.json"), filepath.Join(home, ".config", "llama-coder", "qwen", "settings.json")} {
-		if _, err := os.Stat(settings); err == nil {
-			t.Error("settings.json was written: " + settings)
+	// Leaving the form without saving must not patch the user's own harness
+	// configuration either.
+	for _, f := range []string{
+		filepath.Join(home, ".qwen", "settings.json"),
+		filepath.Join(home, ".pi", "agent", "models.json"),
+	} {
+		if _, err := os.Stat(f); err == nil {
+			t.Error("harness configuration was written: " + f)
 		}
 	}
 }
