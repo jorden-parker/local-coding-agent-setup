@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-
-	"github.com/jorden-parker/local-coding-agent-setup/internal/atomicfile"
 )
 
 // Provider is the subset of a modelProviders.openai[] entry that lca owns.
@@ -41,7 +39,10 @@ func loadSettings(path string) (map[string]any, bool, error) {
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, false, fmt.Errorf("%s: %w", path, err)
+		// Qwen Code tolerates comments and trailing commas; a round trip
+		// through a Go map would delete them permanently, so refuse instead
+		// of silently reformatting the user's file.
+		return nil, false, fmt.Errorf("%s is not strict JSON (%w); remove any comments or trailing commas and retry", path, err)
 	}
 	if m == nil {
 		m = map[string]any{}
@@ -66,28 +67,6 @@ func openaiList(m map[string]any, create bool) []any {
 		mp["openai"] = list
 	}
 	return list
-}
-
-// Sync merges p into modelProviders.openai[] (matched by id) in the settings
-// file at path, creating the file when absent. Every other key is left
-// alone. It reports whether the file changed.
-func Sync(path string, p Provider) (bool, error) {
-	m, _, err := loadSettings(path)
-	if err != nil {
-		return false, err
-	}
-	before, _ := json.Marshal(m)
-	mergeProvider(m, p)
-
-	after, _ := json.Marshal(m)
-	if string(before) == string(after) {
-		return false, nil
-	}
-	out, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return false, err
-	}
-	return true, atomicfile.Write(path, append(out, '\n'))
 }
 
 // Entry returns the provider entry with the given id, or ok false.

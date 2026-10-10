@@ -4,10 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/jorden-parker/local-coding-agent-setup/internal/paths"
-	"github.com/jorden-parker/local-coding-agent-setup/internal/pi"
-	"github.com/jorden-parker/local-coding-agent-setup/internal/qwen"
 )
 
 // skill creates a <dir>/<name>/SKILL.md, the shape both harnesses discover.
@@ -68,21 +64,5 @@ func TestSkillRootsListsEveryRootInOrder(t *testing.T) {
 	}
 	if _, total := skillRoots(managed); total != 0 {
 		t.Fatalf("empty roots must total 0, got %d", total)
-	}
-}
-
-// The harness packages keep their shared skill directory as a tilde literal so
-// settings.json stays portable across HOMEs, while doctor reports the roots it
-// finds on disk through paths. Nothing stops the two drifting, so assert they
-// name the same directory.
-func TestSharedSkillsDirsMatchPaths(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	for _, c := range []struct{ literal, dir string }{
-		{qwen.LocalSkillsDir, paths.LegacyQwenSkillsDir()},
-		{pi.LocalSkillsDir, paths.LegacyPiSkillsDir()},
-	} {
-		if got := paths.Tildify(c.dir); got != c.literal {
-			t.Errorf("settings name %s but doctor reports %s", c.literal, got)
-		}
 	}
 }

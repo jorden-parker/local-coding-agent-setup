@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jorden-parker/local-coding-agent-setup/internal/backup"
 	"github.com/jorden-parker/local-coding-agent-setup/internal/config"
 	"github.com/jorden-parker/local-coding-agent-setup/internal/paths"
 	"github.com/jorden-parker/local-coding-agent-setup/internal/pi"
@@ -84,85 +85,94 @@ func PiProvider(f *config.File) (pi.Provider, error) {
 	return pi.ProviderFor(alias, p, c, value(f, "THINKING") == "true"), nil
 }
 
-// SyncQwen prepares the managed local provider and lean settings for f and
-// shares the provider with ordinary Qwen. It reports whether either file
-// changed.
-func SyncQwen(f *config.File) (qwen.Provider, bool, error) {
-	p, changed, shared, _, err := SyncQwenAt(f, "", "")
-	return p, changed || shared, err
-}
-
-// SyncQwenAt prepares the local provider and lean settings for f, isolated
-// per paths.QwenInstanceDir(port, cfgPort). cfgPort is config.env's own PORT,
-// captured before any runtime override; port is the port actually in effect.
-// A port matching cfgPort still uses the shared default settings file, so
-// ordinary single-instance use is unaffected, and only then is the provider
-// also mirrored into ordinary Qwen's settings (qwen.ShareLocal), since that
-// is the server the VS Code companion's chat and plain qwen can reach.
-// changed reports the managed file, shared the ordinary one.
-func SyncQwenAt(f *config.File, port, cfgPort string) (p qwen.Provider, changed, shared bool, settingsPath string, err error) {
+// SyncQwen merges the local provider into the user's own Qwen Code settings.
+// It reports whether the file changed, the file it patched, and the backup it
+// took if this was the first time lca wrote there.
+func SyncQwen(f *config.File) (p qwen.Provider, changed bool, settingsPath, backedUp string, err error) {
 	p, err = Provider(f)
 	if err != nil {
-		return p, false, false, "", err
+		return p, false, "", "", err
 	}
-	settingsPath = paths.QwenSettingsFor(port, cfgPort)
-	changed, err = qwen.PrepareLocal(settingsPath, p)
-	if err != nil || port != cfgPort {
-		return p, changed, false, settingsPath, err
+	settingsPath = paths.QwenSettings()
+	if backedUp, err = backup.Once(settingsPath); err != nil {
+		return p, false, settingsPath, "", err
 	}
-	shared, err = qwen.ShareLocal(paths.LegacyQwenSettings(), p)
-	return p, changed, shared, settingsPath, err
+	changed, err = qwen.Prepare(settingsPath, p)
+	return p, changed, settingsPath, backedUp, err
 }
 
-// SyncPi writes pi's managed models.json and settings.json for the default
-// instance. It reports whether either file changed.
-func SyncPi(f *config.File) (pi.Provider, bool, error) {
-	p, changed, _, err := SyncPiAt(f, "", "")
-	return p, changed, err
-}
-
-// SyncPiAt writes pi's managed configuration for f, isolated per
-// paths.PiInstanceDir(port, cfgPort) the way SyncQwenAt isolates Qwen's. pi
-// needs no equivalent of qwen.ShareLocal: the managed agent directory is the
-// only one pi-local ever points PI_CODING_AGENT_DIR at.
-func SyncPiAt(f *config.File, port, cfgPort string) (p pi.Provider, changed bool, modelsPath string, err error) {
+// SyncPi merges the local provider into the user's own pi models.json. pi's
+// settings.json is deliberately left alone: defaultProvider and defaultModel
+// are the user's own selection, and pi-local passes both as flags.
+func SyncPi(f *config.File) (p pi.Provider, changed bool, modelsPath, backedUp string, err error) {
 	p, err = PiProvider(f)
 	if err != nil {
-		return p, false, "", err
+		return p, false, "", "", err
 	}
-	modelsPath = paths.PiModelsFor(port, cfgPort)
+	modelsPath = paths.PiModels()
+	if backedUp, err = backup.Once(modelsPath); err != nil {
+		return p, false, modelsPath, "", err
+	}
 	changed, err = pi.PrepareModels(modelsPath, p)
-	if err != nil {
-		return p, changed, modelsPath, err
-	}
-	settings, err := pi.PrepareSettings(paths.PiSettingsFor(port, cfgPort), p)
-	return p, changed || settings, modelsPath, err
+	return p, changed, modelsPath, backedUp, err
 }
 
-// SyncsPi reports whether lca manages a pi configuration: either pi is the
-// selected harness, or pi-local has already created its managed directory.
-func SyncsPi(f *config.File) bool {
-	if Harness(f) == "pi" {
+// Syncs reports whether lca manages harness h's configuration. Since lca
+// patches the files the harnesses already own rather than keeping copies of
+// its own, the test is deliberately narrow: h is the selected harness, or its
+// configuration already carries lca's provider entry from an earlier sync.
+// Having the binary on PATH is not enough — someone who installed a harness
+// for other work has not invited lca into its configuration file.
+func Syncs(f *config.File, h string) bool {
+	if Harness(f) == h {
 		return true
 	}
-	_, err := os.Stat(paths.PiModels())
-	return err == nil
+	switch h {
+	case "qwen":
+		_, ok, err := qwen.Entry(paths.QwenSettings(), value(f, "ALIAS"))
+		return err == nil && ok
+	case "pi":
+		ok, err := pi.HasProvider(paths.PiModels(), pi.ProviderID)
+		return err == nil && ok
+	}
+	return false
 }
 
-// SyncAll prepares the default instance of every harness lca manages: Qwen
-// Code always, since setup.sh installs it, and pi when SyncsPi says so. It
-// returns the settings files it owns, whether or not they changed.
-func SyncAll(f *config.File) ([]string, error) {
-	synced := []string{paths.QwenSettings()}
-	if _, _, err := SyncQwen(f); err != nil {
-		return nil, err
+// SyncsPi reports whether lca manages a pi configuration.
+func SyncsPi(f *config.File) bool { return Syncs(f, "pi") }
+
+// SyncsQwen reports whether lca manages a Qwen Code configuration.
+func SyncsQwen(f *config.File) bool { return Syncs(f, "qwen") }
+
+// Harnesses names every harness lca manages the configuration of, in a stable
+// order. setup.sh installs neither, so neither is assumed to be present.
+func Harnesses(f *config.File) []string {
+	var out []string
+	for _, h := range []string{"qwen", "pi"} {
+		if Syncs(f, h) {
+			out = append(out, h)
+		}
 	}
-	if SyncsPi(f) {
-		_, _, models, err := SyncPiAt(f, "", "")
+	return out
+}
+
+// SyncAll patches the configuration of every harness lca manages and returns
+// the files it wrote to, whether or not they changed.
+func SyncAll(f *config.File) ([]string, error) {
+	var synced []string
+	for _, h := range Harnesses(f) {
+		var path string
+		var err error
+		switch h {
+		case "qwen":
+			_, _, path, _, err = SyncQwen(f)
+		case "pi":
+			_, _, path, _, err = SyncPi(f)
+		}
 		if err != nil {
 			return nil, err
 		}
-		synced = append(synced, models)
+		synced = append(synced, path)
 	}
 	return synced, nil
 }
@@ -245,12 +255,16 @@ func Doctor() []Check {
 	for _, name := range []string{"llama-coder", "local-harness"} {
 		p := filepath.Join(paths.BinDir(), name)
 		b, err := os.ReadFile(p)
-		pinned := []string{"QWEN_HOME", "--auth-type openai --model", "PI_CODING_AGENT_DIR", "--provider"}
+		// The launcher, not the settings file, is what pins model, auth and
+		// endpoint for a local session, so these strings must survive any
+		// edit to it.
+		pinned := []string{"--auth-type openai --model", "--provider llama-local --model", "OPENAI_BASE_URL"}
 		missing := ""
 		if name == "local-harness" {
 			for _, want := range pinned {
 				if !strings.Contains(string(b), want) {
 					missing = want
+					break
 				}
 			}
 		}
@@ -286,45 +300,7 @@ func Doctor() []Check {
 		add("lca on PATH", true, "")
 	}
 
-	want, err := Provider(f)
-	if err == nil {
-		got, ok, err := qwen.Entry(paths.QwenSettings(), want.ID)
-		switch {
-		case err != nil:
-			add("qwen provider", false, err.Error())
-		case !ok:
-			add("qwen provider", false, fmt.Sprintf("no modelProviders.openai entry %q; run lca sync", want.ID))
-		case got.BaseURL != want.BaseURL || got.ContextWindow != want.ContextWindow || got.EnvKey != want.EnvKey:
-			add("qwen provider", false, fmt.Sprintf("entry %q has %s ctx %d, config.env says %s ctx %d; run lca sync", want.ID, got.BaseURL, got.ContextWindow, want.BaseURL, want.ContextWindow))
-		default:
-			add("qwen provider", true, fmt.Sprintf("%s ctx %d", want.ID, want.ContextWindow))
-		}
-	}
-	if err == nil {
-		if err := qwen.CheckLocal(paths.QwenSettings(), want); err != nil {
-			add("qwen local profile", false, err.Error()+"; run lca sync")
-		} else {
-			add("qwen local profile", true, "lean, openai, "+want.ID+", skills "+qwen.LocalSkillsDir+" in "+paths.Tildify(paths.QwenSettings()))
-		}
-		if err := qwen.CheckShared(paths.LegacyQwenSettings(), want); err != nil {
-			add("qwen shared provider", false, err.Error()+"; run lca sync")
-		} else {
-			add("qwen shared provider", true, want.ID+" listed for ordinary qwen and the VS Code companion in "+paths.Tildify(paths.LegacyQwenSettings()))
-		}
-	}
-	if detail, total := skillRoots(paths.QwenSkillsDir(), paths.AgentsSkillsDir(), paths.LegacyQwenSkillsDir()); total == 0 {
-		warn("qwen skills", "no SKILL.md in "+detail)
-	} else {
-		add("qwen skills", true, detail)
-	}
-	if on, err := qwen.UsageStatsEnabled(paths.QwenSettings()); err != nil {
-		add("qwen usage stats", false, err.Error())
-	} else if !on {
-		warn("qwen usage stats", "privacy.usageStatisticsEnabled is false; lca stats --source qwen will be empty")
-	} else {
-		add("qwen usage stats", true, "enabled")
-	}
-
+	addQwenChecks(f, values, add, warn)
 	addPiChecks(f, values, add, warn)
 
 	sd := paths.StateDir()
@@ -353,52 +329,125 @@ func Doctor() []Check {
 	return out
 }
 
+// qwenInstallHint and piInstallHint are the one place each harness's install
+// command is written. local-harness prints the same two strings.
+const (
+	qwenInstallHint = "brew install qwen-code"
+	piInstallHint   = "curl -fsSL https://pi.dev/install.sh | sh"
+)
+
+// addQwenChecks reports on Qwen Code. setup.sh installs neither harness, so a
+// machine without this one stays silent unless HARNESS selects it — the same
+// contract addPiChecks has always had.
+func addQwenChecks(f *config.File, values map[string]string, add func(string, bool, string), warn func(string, string)) {
+	selected := values["HARNESS"] == "qwen"
+	if _, err := exec.LookPath("qwen"); err != nil {
+		if selected {
+			add("qwen on PATH", false, "HARNESS=qwen but Qwen Code is not installed: "+qwenInstallHint)
+		}
+		return
+	}
+	add("qwen on PATH", true, "")
+	settings := paths.QwenSettings()
+	want, err := Provider(f)
+	if err != nil {
+		return
+	}
+	if !selected {
+		if _, ok, err := qwen.Entry(settings, want.ID); err == nil && !ok {
+			// Qwen Code is installed but has never been pointed at the local
+			// server, and HARNESS says it is not meant to be.
+			warn("qwen provider", paths.Tildify(settings)+" carries no local provider yet; run qwen-local or lca sync --harness qwen")
+			return
+		}
+	}
+	got, ok, entryErr := qwen.Entry(settings, want.ID)
+	switch {
+	case entryErr != nil:
+		add("qwen provider", false, entryErr.Error())
+	case !ok:
+		add("qwen provider", false, fmt.Sprintf("no modelProviders.openai entry %q in %s; run lca sync", want.ID, paths.Tildify(settings)))
+	case got.BaseURL != want.BaseURL || got.ContextWindow != want.ContextWindow || got.EnvKey != want.EnvKey:
+		add("qwen provider", false, fmt.Sprintf("entry %q has %s ctx %d, config.env says %s ctx %d; run lca sync", want.ID, got.BaseURL, got.ContextWindow, want.BaseURL, want.ContextWindow))
+	default:
+		add("qwen provider", true, fmt.Sprintf("%s → %s ctx %d in %s", want.ID, want.BaseURL, want.ContextWindow, paths.Tildify(settings)))
+	}
+	// Lean is opt-in and global, so its absence is never a failure: it only
+	// says which profile ordinary qwen and qwen-local are both running under.
+	if _, err := os.Stat(qwen.SnapshotFor(settings)); err == nil {
+		add("qwen lean profile", true, "applied; lca qwen-profile restore reverts it")
+	} else {
+		warn("qwen lean profile", "not applied; lca qwen-profile lean trims background work and tool schemas for a local model")
+	}
+	if on, err := qwen.UsageStatsEnabled(settings); err != nil {
+		add("qwen usage stats", false, err.Error())
+	} else if !on {
+		warn("qwen usage stats", "privacy.usageStatisticsEnabled is false; lca stats --source qwen will be empty")
+	} else {
+		add("qwen usage stats", true, "enabled")
+	}
+	addSkillsCheck("qwen skills", paths.QwenSkillsDir(), add, warn)
+	addBackupCheck("qwen config backup", settings, add)
+}
+
 // addPiChecks reports on the optional pi harness. pi is never installed by
 // setup.sh, so a machine without it stays silent unless HARNESS says pi is the
 // one that should be running.
 func addPiChecks(f *config.File, values map[string]string, add func(string, bool, string), warn func(string, string)) {
 	selected := values["HARNESS"] == "pi"
-	_, lookErr := exec.LookPath("pi")
-	if lookErr != nil {
+	if _, err := exec.LookPath("pi"); err != nil {
 		if selected {
-			add("pi on PATH", false, "HARNESS=pi but pi is not installed: curl -fsSL https://pi.dev/install.sh | sh")
+			add("pi on PATH", false, "HARNESS=pi but pi is not installed: "+piInstallHint)
 		}
 		return
 	}
 	add("pi on PATH", true, "")
+	models := paths.PiModels()
 	want, err := PiProvider(f)
 	if err != nil {
 		return
 	}
-	if _, err := os.Stat(paths.PiModels()); err != nil && os.IsNotExist(err) && !selected {
+	if ok, err := pi.HasProvider(models, pi.ProviderID); err == nil && !ok && !selected {
 		// pi is installed but has never been used against the local server.
-		warn("pi provider", paths.Tildify(paths.PiModels())+" not written yet; run pi-local or lca sync --harness pi")
+		warn("pi provider", paths.Tildify(models)+" carries no local provider yet; run pi-local or lca sync --harness pi")
 		return
 	}
-	if err := pi.CheckModels(paths.PiModels(), want); err != nil {
+	if err := pi.CheckModels(models, want); err != nil {
 		add("pi provider", false, err.Error()+"; run lca sync --harness pi")
 	} else {
-		add("pi provider", true, fmt.Sprintf("%s → %s ctx %d in %s", want.Model, want.BaseURL, want.ContextWindow, paths.Tildify(paths.PiModels())))
+		add("pi provider", true, fmt.Sprintf("%s → %s ctx %d in %s", want.Model, want.BaseURL, want.ContextWindow, paths.Tildify(models)))
 	}
-	if err := pi.CheckSettings(paths.PiSettings(), want); err != nil {
-		add("pi local profile", false, err.Error()+"; run lca sync --harness pi")
-	} else {
-		add("pi local profile", true, want.ID+", skills "+pi.LocalSkillsDir+" in "+paths.Tildify(paths.PiSettings()))
+	addSkillsCheck("pi skills", paths.PiSkillsDir(), add, warn)
+	addBackupCheck("pi config backup", models, add)
+}
+
+// addBackupCheck names the copy lca took of a harness configuration file
+// before it first patched it, so the way back is discoverable later.
+func addBackupCheck(name, path string, add func(string, bool, string)) {
+	found, err := backup.Existing(path)
+	if err != nil || len(found) == 0 {
+		return
 	}
-	if detail, total := skillRoots(paths.PiSkillsDir(), paths.AgentsSkillsDir(), paths.LegacyPiSkillsDir()); total == 0 {
-		warn("pi skills", "no SKILL.md in "+detail)
+	add(name, true, paths.Tildify(found[len(found)-1]))
+}
+
+// addSkillsCheck reports the skills a harness can see, per root. A harness
+// reads its own skills directory and the harness-neutral ~/.agents/skills, and
+// lca names neither in any settings file: both are defaults the harness
+// resolves from its own home. Reporting them separately is how a stale symlink
+// farm in one tells itself apart from a real gap.
+func addSkillsCheck(name, harnessDir string, add func(string, bool, string), warn func(string, string)) {
+	if detail, total := skillRoots(harnessDir, paths.AgentsSkillsDir()); total == 0 {
+		warn(name, "no SKILL.md in "+detail)
 	} else {
-		add("pi skills", true, detail)
+		add(name, true, detail)
 	}
 }
 
 // skillRoots describes the user-level skill directories a harness reads, in
-// that order, with the number of skills each holds. The managed instance
-// directory is listed first because it is the one the harness treats as its
-// own, and it is normally empty; the other two are what qwen-local and pi-local
-// actually offer. The returned count only answers "anything anywhere?": the
-// roots overlap, because a harness skill directory is commonly a symlink farm
-// pointing into ~/.agents/skills.
+// that order, with the number of skills each holds. The returned count only
+// answers "anything anywhere?": the roots overlap, because a harness skill
+// directory is commonly a symlink farm pointing into ~/.agents/skills.
 func skillRoots(dirs ...string) (string, int) {
 	parts := make([]string, 0, len(dirs))
 	total := 0
@@ -482,7 +531,9 @@ func (s Source) Label() string {
 // Stats is the collected data for the stats command and screen. Harness holds
 // whichever harness Source names.
 type Stats struct {
-	Source     Source
+	Source Source
+	// Model is the alias the records were filtered to, or "" for every model.
+	Model      string
 	Harness    []stats.Bucket
 	Server     []stats.Bucket
 	HarnessRaw []usage.Record
@@ -491,27 +542,43 @@ type Stats struct {
 	Notes      []string
 }
 
-// UsageSources names the directories CollectStats reads src's usage from.
+// UsageSources names the directory CollectStats reads src's usage from.
 func UsageSources(src Source) string {
-	dirs := paths.QwenUsageDirs()
 	if src == SourcePi {
-		dirs = paths.PiSessionDirs()
+		return paths.Tildify(paths.PiSessionDir())
 	}
-	var parts []string
-	for _, d := range dirs {
-		parts = append(parts, paths.Tildify(d))
+	return paths.Tildify(paths.QwenUsageDir())
+}
+
+// StatsFilter resolves which model's records CollectStats keeps. The records
+// now live in the harness's own directory, mixed in with every other model
+// the user runs it against, so the default is config.env's ALIAS: without it
+// "response times" would silently average the local model together with a
+// cloud one. An explicit model wins, and allModels drops the filter.
+func StatsFilter(model string, allModels bool) string {
+	if model != "" {
+		return model
 	}
-	return strings.Join(parts, ", ")
+	if allModels {
+		return ""
+	}
+	f, err := LoadConfig()
+	if err != nil {
+		return ""
+	}
+	return value(f, "ALIAS")
 }
 
 // CollectStats compacts server logs, then reads both sources since days ago,
-// keeping only model when non-empty.
-func CollectStats(days int, model string, src Source) (Stats, error) {
+// keeping only the model StatsFilter resolves. Stats.Model reports it so the
+// caller can say what was counted.
+func CollectStats(days int, model string, allModels bool, src Source) (Stats, error) {
 	var s Stats
 	s.Source = src
 	if src == SourceBoth {
 		s.Source = HarnessSource()
 	}
+	s.Model = StatsFilter(model, allModels)
 	since := time.Now().AddDate(0, 0, -days)
 	if src == SourceServer || src == SourceBoth {
 		if _, _, err := server.Compact(paths.StateDir()); err != nil {
@@ -521,7 +588,7 @@ func CollectStats(days int, model string, src Source) (Stats, error) {
 		if err != nil {
 			return s, err
 		}
-		s.ServerRaw = filterTimings(ts, model)
+		s.ServerRaw = filterTimings(ts, s.Model)
 		s.Server = stats.FromServer(s.ServerRaw)
 	}
 	if src != SourceServer {
@@ -529,15 +596,15 @@ func CollectStats(days int, model string, src Source) (Stats, error) {
 		var skipped int
 		var err error
 		if s.Source == SourcePi {
-			recs, skipped, err = pi.ReadSessions(since, paths.PiSessionDirs()...)
+			recs, skipped, err = pi.ReadSessions(since, paths.PiSessionDir())
 		} else {
-			recs, skipped, err = usage.ReadUsageDirs(since, paths.QwenUsageDirs()...)
+			recs, skipped, err = usage.ReadUsageDirs(since, paths.QwenUsageDir())
 		}
 		if err != nil {
 			return s, err
 		}
 		s.Skipped = skipped
-		s.HarnessRaw = filterRecords(recs, model)
+		s.HarnessRaw = filterRecords(recs, s.Model)
 		s.Harness = stats.FromUsage(s.HarnessRaw)
 	}
 	return s, nil

@@ -6,8 +6,14 @@
 #
 # Harness: the name it is invoked under wins (qwen-local -> Qwen Code,
 # pi-local -> pi), then HARNESS= in the environment, then HARNESS in
-# config.env, then qwen. Qwen Code is installed by setup.sh; pi is not, so
-# pi-local fails with an install hint when it is missing.
+# config.env, then qwen. Neither harness is installed by setup.sh, so each
+# launcher fails with an install hint when its binary is missing.
+#
+# Each harness keeps its own configuration (~/.qwen, ~/.pi/agent, or wherever
+# QWEN_HOME / PI_CODING_AGENT_DIR point) and this script does not move it. It
+# runs lca sync, which merges only the local provider entry into that file, and
+# passes model, auth and endpoint as flags, so the harness reaches this
+# session's server whatever the file happens to select.
 #
 # Ports: without PORT= in the environment, the first port from config.env's
 # PORT upward that no other running session holds is used, so several sessions
@@ -23,13 +29,11 @@
 # Each session holds ${XDG_STATE_HOME:-~/.local/state}/llama-coder/instances/
 # <port>/ with owner.pid, server.pid (only when it started the server, or
 # adopted one a crashed session left behind), launcher.log (that server's
-# console output) and sharers/<pid>. A port other than config.env's own moves
-# the harness configuration to a <harness>-<port> sibling directory so sessions
-# never race on shared settings: QWEN_HOME for Qwen Code, PI_CODING_AGENT_DIR
-# for pi. Every Qwen directory's ide/ is a symlink to ~/.qwen/ide (or the ide/
-# under a QWEN_HOME inherited from the environment), where the VS Code
-# companion extension writes the <port>.lock Qwen Code needs to connect; pi has
-# no such companion.
+# console output) and sharers/<pid>. Sessions on different ports share one
+# harness configuration, so the provider entry's baseUrl is whichever port
+# synced last; each session still talks to its own server, because Qwen Code
+# gets --openai-base-url from here. pi has no base-URL flag, so pin PORT= in
+# config.env if you run two pi sessions at once.
 set -eo pipefail
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/llama-coder/config.env"
@@ -46,7 +50,6 @@ esac
 env_harness="${HARNESS:-}"
 env_port="${PORT:-}"
 env_ctx="${CTX:-}"
-env_qwen_home="${QWEN_HOME:-}"
 # shellcheck source=/dev/null
 source "$CONFIG"
 cfg_port="${PORT:-}"
@@ -249,36 +252,17 @@ else
   [[ -n "$port" ]] || { echo "no free port from $cfg_port upward; set PORT= to pin one" >&2; exit 1; }
 fi
 
-# instance_dir echoes the managed configuration directory for this harness:
-# the default one on config.env's own port, an isolated sibling otherwise.
-instance_dir() {
-  local base
-  base="$(dirname -- "$CONFIG")/$1"
-  [[ "$port" != "$cfg_port" ]] && base="$base-${port}"
-  printf '%s' "$base"
-}
-
 prepare_qwen() {
-  local qwen_home_dir ide_dir ide_link
-  qwen_home_dir="$(instance_dir qwen)"
-  export QWEN_HOME="$qwen_home_dir"
-  # Qwen Code looks for the IDE companion's lock file in $QWEN_HOME/ide/<port>.lock
-  # (Storage.getGlobalIdeDir), but the VS Code extension runs outside this shell
-  # and writes it to ~/.qwen/ide. Without the lock file the CLI connects with the
-  # port from QWEN_CODE_IDE_SERVER_PORT and no bearer token, and the extension
-  # answers 401 Unauthorized. Share the directory instead. An inherited QWEN_HOME
-  # is honoured because an editor launched from that shell writes under it too.
-  ide_dir="${env_qwen_home:-$HOME/.qwen}/ide"
-  ide_link="$qwen_home_dir/ide"
-  mkdir -p "$ide_dir" "$qwen_home_dir"
-  if [[ -L "$ide_link" ]]; then
-    rm -f "$ide_link"
-    ln -s "$ide_dir" "$ide_link"
-  elif [[ -e "$ide_link" ]]; then
-    echo "$tag: $ide_link exists and is not a symlink; the IDE companion will not find its lock file in $ide_dir" >&2
-  else
-    ln -s "$ide_dir" "$ide_link"
-  fi
+  command -v qwen >/dev/null 2>&1 || {
+    echo "Qwen Code is not installed. Install it with: brew install qwen-code" >&2
+    exit 1
+  }
+  # QWEN_HOME is deliberately left as the shell set it: Qwen Code reads its own
+  # configuration, memory, sessions and the IDE companion's ide/<port>.lock from
+  # there, and lca sync patches that same file. Redirecting it would hide all of
+  # that and make the companion answer 401 Unauthorized for want of the lock.
+  # These three, though, would override what config.env and the lean profile
+  # say, so an inherited value must not leak in.
   unset QWEN_CODE_ENABLE_WORKFLOWS QWEN_CODE_DISABLE_WORKFLOWS QWEN_RUNTIME_DIR
 }
 
@@ -287,14 +271,11 @@ prepare_pi() {
     echo "pi is not installed. Install it with: curl -fsSL https://pi.dev/install.sh | sh" >&2
     exit 1
   }
-  # pi keeps models.json, settings.json and its sessions in one agent
-  # directory. The managed one is separate from the user's own ~/.pi/agent, so
-  # a local-model session never rewrites their model selection; lca stats reads
-  # the sessions from here. An inherited session directory would move them out
-  # of reach again.
-  PI_CODING_AGENT_DIR="$(instance_dir pi)"
-  export PI_CODING_AGENT_DIR
-  mkdir -p "$PI_CODING_AGENT_DIR"
+  # PI_CODING_AGENT_DIR is left alone for the same reason as QWEN_HOME: it is
+  # where pi keeps models.json and its sessions, and lca sync and lca stats both
+  # resolve it the same way. PI_CODING_AGENT_SESSION_DIR is still cleared,
+  # because it would move the sessions out from under that directory and so out
+  # of reach of lca stats.
   unset PI_CODING_AGENT_SESSION_DIR
 }
 
@@ -316,7 +297,9 @@ case "$harness" in
   qwen) prepare_qwen ;;
   pi) prepare_pi ;;
 esac
-# A one-off CTX= must reach the harness's context window too, not only the server.
+# The port and a one-off CTX= must reach the harness's provider entry, not only
+# the server: pi has no base-URL flag, so models.json is the only place it
+# learns which port to call, and neither harness takes a context-size flag.
 sync_args=(sync --harness "$harness" --port "$port")
 [[ -n "$env_ctx" ]] && sync_args+=(--ctx "$env_ctx")
 lca "${sync_args[@]}" >/dev/null

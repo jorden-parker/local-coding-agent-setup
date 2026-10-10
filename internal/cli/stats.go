@@ -16,10 +16,20 @@ import (
 	"github.com/jorden-parker/local-coding-agent-setup/internal/stats"
 )
 
+// modelLabel says which model the figures cover. The harness keeps its
+// records for every model in one directory, so leaving this implicit would
+// let a local average quietly include cloud sessions.
+func modelLabel(model string) string {
+	if model == "" {
+		return "all models"
+	}
+	return "model " + model
+}
+
 func statsCmd() *cobra.Command {
 	var days int
 	var model, source string
-	var asJSON, raw bool
+	var asJSON, raw, allModels bool
 	c := &cobra.Command{
 		Use:   "stats",
 		Short: "Response times per day from the harness's usage records and llama-server's timings",
@@ -28,7 +38,7 @@ func statsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			s, err := app.CollectStats(days, model, src)
+			s, err := app.CollectStats(days, model, allModels, src)
 			if err != nil {
 				return err
 			}
@@ -45,7 +55,7 @@ func statsCmd() *cobra.Command {
 				return nil
 			}
 			if src != app.SourceServer {
-				fmt.Printf("%s API calls (apiDurationMs), last %d days, from %s\n", s.Source.Label(), days, app.UsageSources(s.Source))
+				fmt.Printf("%s API calls (apiDurationMs), last %d days, %s, from %s\n", s.Source.Label(), days, modelLabel(s.Model), app.UsageSources(s.Source))
 				printBuckets(s.Harness, false)
 				if s.Skipped > 0 {
 					fmt.Printf("(%d malformed or unsupported lines skipped)\n", s.Skipped)
@@ -53,7 +63,7 @@ func statsCmd() *cobra.Command {
 				fmt.Println()
 			}
 			if src == app.SourceServer || src == app.SourceBoth {
-				fmt.Printf("llama-server requests (total time), last %d days, from %s\n", days, paths.Tildify(paths.Timings()))
+				fmt.Printf("llama-server requests (total time), last %d days, %s, from %s\n", days, modelLabel(s.Model), paths.Tildify(paths.Timings()))
 				printBuckets(s.Server, true)
 				fmt.Println()
 			}
@@ -64,7 +74,8 @@ func statsCmd() *cobra.Command {
 		},
 	}
 	c.Flags().IntVar(&days, "days", 14, "how many days back to look")
-	c.Flags().StringVar(&model, "model", "", "only this model / alias")
+	c.Flags().StringVar(&model, "model", "", "only this model / alias (default: config.env's ALIAS)")
+	c.Flags().BoolVar(&allModels, "all-models", false, "count every model in the harness's records, not just ALIAS")
 	c.Flags().StringVar(&source, "source", "both", "qwen | pi | server | both (both pairs the server with config.env's HARNESS)")
 	c.Flags().BoolVar(&asJSON, "json", false, "print JSON instead of tables")
 	c.Flags().BoolVar(&raw, "raw", false, "print every request instead of daily buckets")

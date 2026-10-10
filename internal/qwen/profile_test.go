@@ -60,7 +60,7 @@ func TestLeanPreservesProviderAndUnrelatedEdits(t *testing.T) {
 	if _, err := ApplyLean(p, backup); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Sync(p, ProviderFor("local", 8080, 65536)); err != nil {
+	if _, err := Prepare(p, ProviderFor("local", 8080, 65536)); err != nil {
 		t.Fatal(err)
 	}
 	m, _, _ := loadSettings(p)

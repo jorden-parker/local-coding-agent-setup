@@ -159,7 +159,10 @@ func harnessLauncherFixture(t *testing.T, as string) (string, string) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
 	t.Setenv("PATH", dir+":/usr/bin:/bin")
+	// Both harness home variables are set to prove the launcher leaves them
+	// alone: they are where each harness reads the configuration lca patches.
 	t.Setenv("QWEN_HOME", filepath.Join(dir, "remote"))
+	t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(dir, "remote-pi"))
 	t.Setenv("QWEN_RUNTIME_DIR", filepath.Join(dir, "remote-runtime"))
 	t.Setenv("QWEN_CODE_ENABLE_WORKFLOWS", "true")
 	t.Setenv("QWEN_CODE_DISABLE_WORKFLOWS", "false")
@@ -258,8 +261,9 @@ func TestQwenLauncherPinsSelectionAndForwardsArguments(t *testing.T) {
 	if args := readCapture(t, capture+".args"); args != want {
 		t.Fatalf("args: %q", args)
 	}
-	// config.env's own PORT is 8080; the 9000 override isolates QWEN_HOME.
-	want = filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen-9000") + "\nlocal\nhttp://127.0.0.1:9000/v1\nlocal\nunset\nunset\nunset\n"
+	// QWEN_HOME is the harness's own configuration directory and lca does not
+	// move it, so an inherited value survives untouched whatever the port.
+	want = os.Getenv("QWEN_HOME") + "\nlocal\nhttp://127.0.0.1:9000/v1\nlocal\nunset\nunset\nunset\n"
 	if env := readCapture(t, capture+".env"); env != want {
 		t.Fatalf("env: %q", env)
 	}
@@ -277,18 +281,6 @@ func TestQwenLauncherPinsSelectionAndForwardsArguments(t *testing.T) {
 	}
 	if exists(filepath.Join(instancesDir(), "9000")) {
 		t.Fatal("claim left behind")
-	}
-}
-
-func TestQwenLauncherSharesDefaultDirWhenPortMatchesConfig(t *testing.T) {
-	launcher, capture := qwenLauncherFixture(t)
-	t.Setenv("PORT", "8080") // matches config.env's own PORT: no isolation needed.
-	if _, out, err := runLauncher(t, launcher); err != nil {
-		t.Fatalf("%v %s", err, out)
-	}
-	want := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen") + "\nlocal\nhttp://127.0.0.1:8080/v1\nlocal\nunset\nunset\nunset\n"
-	if env := readCapture(t, capture+".env"); env != want {
-		t.Fatalf("env: %q", env)
 	}
 }
 
@@ -385,7 +377,7 @@ func TestQwenLauncherAutoSkipsLiveClaimAndClearsStaleOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
-	want := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen-8081") + "\nlocal\nhttp://127.0.0.1:8081/v1\nlocal\nunset\nunset\nunset\n"
+	want := os.Getenv("QWEN_HOME") + "\nlocal\nhttp://127.0.0.1:8081/v1\nlocal\nunset\nunset\nunset\n"
 	if env := readCapture(t, capture+".env"); env != want {
 		t.Fatalf("env: %q", env)
 	}
@@ -418,7 +410,7 @@ func TestQwenLauncherAutoStartsServerOnConfigPort(t *testing.T) {
 	if len(llama) < 2 || llama[0] != "8080" { // CTX is unset here, so the third line is empty
 		t.Fatalf("llama-coder env: %q", llama)
 	}
-	want := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen") + "\nlocal\nhttp://127.0.0.1:8080/v1\nlocal\nunset\nunset\nunset\n"
+	want := os.Getenv("QWEN_HOME") + "\nlocal\nhttp://127.0.0.1:8080/v1\nlocal\nunset\nunset\nunset\n"
 	if env := readCapture(t, capture+".env"); env != want {
 		t.Fatalf("env: %q", env)
 	}
@@ -522,61 +514,26 @@ func TestQwenLauncherAdoptsOnlyOrphanedLlamaServers(t *testing.T) {
 	}
 }
 
-// Qwen Code reads the IDE companion's <port>.lock from $QWEN_HOME/ide, but the
-// VS Code extension writes it under the global Qwen dir, so every instance
-// directory's ide/ must point there.
-func TestQwenLauncherSharesIdeLockDir(t *testing.T) {
+// QWEN_HOME is no longer redirected, so Qwen Code finds the IDE companion's
+// <port>.lock in its own ide/ directory and the launcher has no link to make.
+func TestQwenLauncherCreatesNoIdeLink(t *testing.T) {
 	launcher, _ := qwenLauncherFixture(t)
-	// An inherited QWEN_HOME wins: an editor started from that shell writes its lock file there.
 	if _, out, err := runLauncher(t, launcher); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
-	link := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen-9000", "ide")
-	want := filepath.Join(os.Getenv("QWEN_HOME"), "ide")
-	if got, err := os.Readlink(link); err != nil || got != want {
-		t.Fatalf("ide link: %q %v, want %q", got, err, want)
+	for _, dir := range []string{
+		filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder"),
+		os.Getenv("QWEN_HOME"),
+		filepath.Join(os.Getenv("HOME"), ".qwen"),
+	} {
+		link := filepath.Join(dir, "ide")
+		if _, err := os.Lstat(link); !os.IsNotExist(err) {
+			t.Fatalf("%s was created: %v", link, err)
+		}
 	}
-	if info, err := os.Stat(want); err != nil || !info.IsDir() {
-		t.Fatalf("lock dir %s: %v", want, err)
-	}
-
-	// Without QWEN_HOME the extension uses ~/.qwen/ide; a stale link is replaced.
-	os.Unsetenv("QWEN_HOME")
-	t.Setenv("PORT", "8080")
-	defaultLink := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen", "ide")
-	if err := os.MkdirAll(filepath.Dir(defaultLink), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(filepath.Join(t.TempDir(), "stale"), defaultLink); err != nil {
-		t.Fatal(err)
-	}
-	if _, out, err := runLauncher(t, launcher); err != nil {
-		t.Fatalf("%v %s", err, out)
-	}
-	want = filepath.Join(os.Getenv("HOME"), ".qwen", "ide")
-	if got, err := os.Readlink(defaultLink); err != nil || got != want {
-		t.Fatalf("default ide link: %q %v, want %q", got, err, want)
-	}
-	if info, err := os.Stat(want); err != nil || !info.IsDir() {
-		t.Fatalf("lock dir %s: %v", want, err)
-	}
-
-	// A real directory in the way is left alone with a warning.
-	if err := os.Remove(defaultLink); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(defaultLink, 0755); err != nil {
-		t.Fatal(err)
-	}
-	_, out, err := runLauncher(t, launcher)
-	if err != nil {
-		t.Fatalf("%v %s", err, out)
-	}
-	if !strings.Contains(string(out), defaultLink+" exists and is not a symlink") {
-		t.Fatalf("warning missing: %s", out)
-	}
-	if info, err := os.Lstat(defaultLink); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		t.Fatalf("directory replaced: %v %v", info, err)
+	// Nor does it build a configuration directory of its own any more.
+	if exists(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "qwen")) {
+		t.Fatal("managed qwen directory created")
 	}
 }
 
@@ -596,32 +553,21 @@ func TestPiLauncherPinsSelectionAndIsolatesAgentDir(t *testing.T) {
 	if args := readCapture(t, capture+".args"); args != want {
 		t.Fatalf("args: %q", args)
 	}
-	// config.env's own PORT is 8080; the 9000 override isolates the agent dir.
-	// An inherited session directory would move sessions out of lca stats' reach.
-	want = filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "pi-9000") + "\nunset\n"
+	// PI_CODING_AGENT_DIR is pi's own configuration directory and lca does not
+	// move it. An inherited session directory, though, would move the sessions
+	// out from under it and so out of lca stats' reach.
+	want = os.Getenv("PI_CODING_AGENT_DIR") + "\nunset\n"
 	if env := readCapture(t, capture+".env"); env != want {
 		t.Fatalf("env: %q", env)
 	}
 	if sync := readCapture(t, capture+".sync"); sync != "sync\n--harness\npi\n--port\n9000\n" {
 		t.Fatalf("sync: %q", sync)
 	}
-	if !exists(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "pi-9000")) {
-		t.Fatal("agent directory not created")
+	if exists(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "pi")) {
+		t.Fatal("managed pi directory created")
 	}
 	if exists(filepath.Join(instancesDir(), "9000")) {
 		t.Fatal("claim left behind")
-	}
-}
-
-func TestPiLauncherSharesDefaultDirWhenPortMatchesConfig(t *testing.T) {
-	launcher, capture := piLauncherFixture(t)
-	t.Setenv("PORT", "8080") // matches config.env's own PORT: no isolation needed.
-	if _, out, err := runLauncher(t, launcher); err != nil {
-		t.Fatalf("%v %s", err, out)
-	}
-	want := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "llama-coder", "pi") + "\nunset\n"
-	if env := readCapture(t, capture+".env"); env != want {
-		t.Fatalf("env: %q", env)
 	}
 }
 
@@ -645,6 +591,22 @@ func TestPiLauncherRejectsOwnedFlags(t *testing.T) {
 	}
 	if args := readCapture(t, capture+".args"); !strings.HasSuffix(args, "--thinking\nhigh\n") {
 		t.Fatalf("args: %q", args)
+	}
+}
+
+// Neither harness is installed by setup.sh any more, so each launcher has to
+// say how to get its own.
+func TestQwenLauncherExplainsHowToInstallQwen(t *testing.T) {
+	launcher, capture := qwenLauncherFixture(t)
+	if err := os.Remove(filepath.Join(filepath.Dir(launcher), "qwen")); err != nil {
+		t.Fatal(err)
+	}
+	_, out, err := runLauncher(t, launcher)
+	if err == nil || !strings.Contains(string(out), "brew install qwen-code") {
+		t.Fatalf("missing qwen: %v %s", err, out)
+	}
+	if exists(capture + ".sync") {
+		t.Fatal("synced although qwen is missing")
 	}
 }
 

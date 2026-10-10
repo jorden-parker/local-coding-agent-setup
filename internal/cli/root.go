@@ -41,6 +41,6 @@ Run with no arguments to open the interactive UI.`,
 			return tui.Run()
 		},
 	}
-	root.AddCommand(configCmd(), syncCmd(), statsCmd(), compactCmd(), metricsCmd(), doctorCmd(), qwenProfileCmd())
+	root.AddCommand(configCmd(), syncCmd(), unsyncCmd(), statsCmd(), compactCmd(), metricsCmd(), doctorCmd(), qwenProfileCmd())
 	return root
 }

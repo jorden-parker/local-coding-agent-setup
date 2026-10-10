@@ -46,7 +46,9 @@ func newStatsScreen() statsScreen {
 }
 
 func loadStats() tea.Msg {
-	s, err := app.CollectStats(statsDays, "", app.SourceBoth)
+	// No explicit model and allModels false: the same ALIAS default the CLI
+	// uses, so the two never disagree about what they are counting.
+	s, err := app.CollectStats(statsDays, "", false, app.SourceBoth)
 	return statsLoadedMsg{s: s, err: err}
 }
 

@@ -98,35 +98,6 @@ func TestPrepareModelsKeepsEverythingElse(t *testing.T) {
 	}
 }
 
-func TestPrepareSettingsOwnsOnlySelectionAndSkills(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "settings.json")
-	existing := `{"theme": "dark", "skills": ["~/work/skills"]}`
-	if err := os.WriteFile(path, []byte(existing), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	p := ProviderFor("local", 8080, 65536, false)
-	if _, err := PrepareSettings(path, p); err != nil {
-		t.Fatal(err)
-	}
-	m := read(t, path)
-	if m["theme"] != "dark" {
-		t.Fatal("unrelated setting lost")
-	}
-	if m["defaultProvider"] != ProviderID || m["defaultModel"] != "local" {
-		t.Fatalf("selection: %+v", m)
-	}
-	skills := m["skills"].([]any)
-	if len(skills) != 2 || skills[0] != "~/work/skills" || skills[1] != LocalSkillsDir {
-		t.Fatalf("skills: %+v", skills)
-	}
-	if changed, err := PrepareSettings(path, p); err != nil || changed {
-		t.Fatal("second run changed the file", err, changed)
-	}
-	if err := CheckSettings(path, p); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestPrepareRejectsMalformedFiles(t *testing.T) {
 	dir := t.TempDir()
 	p := ProviderFor("local", 8080, 65536, false)
@@ -146,13 +117,6 @@ func TestPrepareRejectsMalformedFiles(t *testing.T) {
 		if after, _ := os.ReadFile(path); string(after) != body {
 			t.Fatalf("%s: rewritten", name)
 		}
-	}
-	path := filepath.Join(dir, "skills.json")
-	if err := os.WriteFile(path, []byte(`{"skills": "one"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := PrepareSettings(path, p); err == nil {
-		t.Fatal("string skills accepted")
 	}
 	// A missing file is drift, not an error.
 	if err := CheckModels(filepath.Join(dir, "absent.json"), p); err == nil {

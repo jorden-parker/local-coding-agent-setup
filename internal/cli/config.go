@@ -146,31 +146,43 @@ func showConfig() error {
 	return nil
 }
 
+// report names the backup lca just took, so the first write to a file the
+// user owns says where the original went.
+func report(path, backedUp string) {
+	if backedUp == "" {
+		return
+	}
+	fmt.Printf("%s: copied to %s before the first change\n", paths.Tildify(path), paths.Tildify(backedUp))
+}
+
 func syncCmd() *cobra.Command {
 	var port, ctx, harness string
 	c := &cobra.Command{
 		Use:   "sync",
-		Short: "Prepare the local model, provider and settings of an agent harness",
-		Long: `Write the configuration an agent harness needs to reach the local
-llama-server: Qwen Code's provider entry and lean settings, pi's models.json
-and default model, or both.
+		Short: "Patch an agent harness's own configuration to reach the local server",
+		Long: `Merge the local llama-server's provider entry into the configuration the
+agent harness already owns: Qwen Code's ~/.qwen/settings.json, pi's
+~/.pi/agent/models.json, or both. Only the keys lca needs are written; every
+other setting is left as it is, and the file is copied aside as
+<name>.lca-backup-<timestamp>.json before the first such write.
 
-Without --harness, Qwen Code is prepared, and pi too when config.env selects it
-or its managed directory already exists. The launchers pass the harness and the
-port they actually started with.`,
+Without --harness, every harness lca manages is patched: the one config.env
+selects, plus any whose configuration already carries the local provider from an
+earlier sync. The launchers pass the harness and the port they started with.
+
+lca unsync takes the entry back out.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := app.LoadConfig()
 			if err != nil {
 				return err
 			}
-			cfgPort, _ := f.Get("PORT")
-			activePort := cfgPort
 			// Runtime overrides only; config.env is not saved. The launcher
-			// passes the PORT= and CTX= it launched with.
+			// passes the PORT= and CTX= it launched with, and the port has to
+			// reach the provider entry: pi has no base-URL flag, so
+			// models.json is the only way it learns which server to call.
 			if cmd.Flags().Changed("port") {
 				f.Set("PORT", port)
-				activePort = port
 			}
 			if cmd.Flags().Changed("ctx") {
 				f.Set("CTX", ctx)
@@ -183,29 +195,24 @@ port they actually started with.`,
 			}
 			harnesses := []string{harness}
 			if !cmd.Flags().Changed("harness") {
-				// Qwen Code is always installed; pi only once it has been used.
-				harnesses = []string{"qwen"}
-				if app.SyncsPi(f) {
-					harnesses = append(harnesses, "pi")
-				}
+				harnesses = app.Harnesses(f)
 			}
 			for _, h := range harnesses {
 				switch h {
 				case "pi":
-					p, changed, modelsPath, err := app.SyncPiAt(f, activePort, cfgPort)
+					p, changed, modelsPath, backedUp, err := app.SyncPi(f)
 					if err != nil {
 						return err
 					}
+					report(modelsPath, backedUp)
 					fmt.Printf("%s: provider %q → %s, model %q, contextWindow %d (%s)\n", paths.Tildify(modelsPath), p.ID, p.BaseURL, p.Model, p.ContextWindow, state(changed))
 				case "qwen":
-					p, changed, shared, settingsPath, err := app.SyncQwenAt(f, activePort, cfgPort)
+					p, changed, settingsPath, backedUp, err := app.SyncQwen(f)
 					if err != nil {
 						return err
 					}
+					report(settingsPath, backedUp)
 					fmt.Printf("%s: provider %q → %s, contextWindowSize %d (%s)\n", paths.Tildify(settingsPath), p.ID, p.BaseURL, p.ContextWindow, state(changed))
-					if activePort == cfgPort {
-						fmt.Printf("%s: provider %q shared with ordinary qwen and the VS Code companion (%s)\n", paths.Tildify(paths.LegacyQwenSettings()), p.ID, state(shared))
-					}
 				default:
 					return fmt.Errorf("--harness must be qwen or pi, not %q", h)
 				}

@@ -38,117 +38,50 @@ func StateDir() string {
 // Timings is the compacted per-request timing file.
 func Timings() string { return filepath.Join(StateDir(), "timings.jsonl") }
 
-// instanceDir is <ConfigDir>/<prefix> when port matches cfgPort (config.env's
-// own PORT), or an isolated "<prefix>-<port>" sibling otherwise. A second
-// llama-coder/harness pair started on a different port then never shares
-// mutable harness state, and races on the same settings file, with the default
-// instance.
-func instanceDir(prefix, port, cfgPort string) string {
-	if port == "" || port == cfgPort {
-		return filepath.Join(ConfigDir(), prefix)
-	}
-	return filepath.Join(ConfigDir(), prefix+"-"+port)
-}
+// QwenDir is the Qwen Code configuration directory lca patches: $QWEN_HOME
+// when the shell exports an absolute one, otherwise ~/.qwen. Qwen Code itself
+// honours QWEN_HOME, so ignoring it would let lca write a provider entry the
+// harness never reads — and report it as present. A relative value is ignored
+// the way xdg() ignores a relative XDG_CONFIG_HOME.
+func QwenDir() string { return harnessDir("QWEN_HOME", ".qwen") }
 
-// instanceDirs lists the default instance directory, every <prefix>-<port>
-// sibling (sorted by name) and finally legacy, each suffixed with leaf.
-func instanceDirs(prefix, leaf, legacy string) []string {
-	dirs := []string{filepath.Join(ConfigDir(), prefix, leaf)}
-	extra, _ := filepath.Glob(filepath.Join(ConfigDir(), prefix+"-*", leaf))
-	dirs = append(dirs, extra...)
-	return append(dirs, legacy)
-}
-
-// QwenDir holds the managed qwen-local configuration, independent of QWEN_HOME.
-func QwenDir() string { return filepath.Join(ConfigDir(), "qwen") }
-
-// QwenInstanceDir is the managed Qwen directory for port.
-func QwenInstanceDir(port, cfgPort string) string { return instanceDir("qwen", port, cfgPort) }
-
-// QwenSettings is the managed qwen-local settings file.
+// QwenSettings is the settings file lca merges the local provider into.
 func QwenSettings() string { return filepath.Join(QwenDir(), "settings.json") }
-
-// QwenSettingsFor is the managed settings file for QwenInstanceDir(port, cfgPort).
-func QwenSettingsFor(port, cfgPort string) string {
-	return filepath.Join(QwenInstanceDir(port, cfgPort), "settings.json")
-}
-
-// QwenSkillsDir is the managed instance's own skill directory, which Qwen Code
-// reads as $QWEN_HOME/skills. It starts empty: qwen-local's skills come from
-// AgentsSkillsDir and the LegacyQwenSkillsDir entry lca sync writes into
-// settings.json.
-func QwenSkillsDir() string { return filepath.Join(QwenDir(), "skills") }
 
 // QwenUsageDir holds Qwen Code's token-usage-YYYY-MM.jsonl files.
 func QwenUsageDir() string { return filepath.Join(QwenDir(), "usage") }
 
-// QwenUsageDirs lists every directory lca stats reads Qwen usage from: the
-// default instance's, every qwen-<port> instance qwen-local has created
-// (sorted by name), then the legacy ~/.qwen one. Earlier entries win for
-// duplicate record IDs.
-func QwenUsageDirs() []string { return instanceDirs("qwen", "usage", LegacyQwenUsageDir()) }
+// QwenSkillsDir is Qwen Code's own skill directory.
+func QwenSkillsDir() string { return filepath.Join(QwenDir(), "skills") }
 
-// LegacyQwenDir holds ordinary Qwen settings and historical usage.
-func LegacyQwenDir() string { return filepath.Join(home(), ".qwen") }
+// PiDir is the pi agent directory lca patches: $PI_CODING_AGENT_DIR when the
+// shell exports an absolute one, otherwise ~/.pi/agent. pi honours that
+// variable, so the same reasoning as QwenDir applies.
+func PiDir() string { return harnessDir("PI_CODING_AGENT_DIR", filepath.Join(".pi", "agent")) }
 
-func LegacyQwenSettings() string { return filepath.Join(LegacyQwenDir(), "settings.json") }
-
-func LegacyQwenUsageDir() string { return filepath.Join(LegacyQwenDir(), "usage") }
-
-// LegacyQwenSkillsDir is ordinary qwen's own skill directory, the one
-// qwen.LocalSkillsDir names in settings.json.
-func LegacyQwenSkillsDir() string { return filepath.Join(LegacyQwenDir(), "skills") }
-
-// PiDir holds the managed pi-local agent directory, which pi-local points
-// PI_CODING_AGENT_DIR at. It is separate from the user's own ~/.pi/agent.
-func PiDir() string { return filepath.Join(ConfigDir(), "pi") }
-
-// PiInstanceDir is the managed pi agent directory for port.
-func PiInstanceDir(port, cfgPort string) string { return instanceDir("pi", port, cfgPort) }
-
-// PiModels is pi's models.json in the default instance.
+// PiModels is the models.json lca merges the local provider into.
 func PiModels() string { return filepath.Join(PiDir(), "models.json") }
 
-// PiModelsFor is pi's models.json in PiInstanceDir(port, cfgPort).
-func PiModelsFor(port, cfgPort string) string {
-	return filepath.Join(PiInstanceDir(port, cfgPort), "models.json")
-}
+// PiSessionDir holds pi's session files, which lca stats derives timings from.
+func PiSessionDir() string { return filepath.Join(PiDir(), "sessions") }
 
-// PiSettings is pi's settings.json in the default instance.
-func PiSettings() string { return filepath.Join(PiDir(), "settings.json") }
-
-// PiSettingsFor is pi's settings.json in PiInstanceDir(port, cfgPort).
-func PiSettingsFor(port, cfgPort string) string {
-	return filepath.Join(PiInstanceDir(port, cfgPort), "settings.json")
-}
-
-// PiSkillsDir is the managed instance's own skill directory, which pi reads as
-// $PI_CODING_AGENT_DIR/skills. It starts empty: pi-local's skills come from
-// AgentsSkillsDir and the LegacyPiSkillsDir entry lca sync writes into
-// settings.json.
+// PiSkillsDir is pi's own skill directory.
 func PiSkillsDir() string { return filepath.Join(PiDir(), "skills") }
 
-// PiSessionDirs lists every directory lca stats reads pi sessions from: the
-// default instance's, every pi-<port> instance pi-local has created (sorted by
-// name), then the user's own ~/.pi/agent one. Earlier entries win for
-// duplicate entry IDs.
-func PiSessionDirs() []string { return instanceDirs("pi", "sessions", LegacyPiSessionDir()) }
+// harnessDir returns an absolute override from the environment, else
+// home()/fallback. Only an absolute value wins: a relative one would resolve
+// against each process's working directory, so lca and the harness it
+// configures could disagree about which file is theirs.
+func harnessDir(env, fallback string) string {
+	if v := os.Getenv(env); v != "" && filepath.IsAbs(v) {
+		return v
+	}
+	return filepath.Join(home(), fallback)
+}
 
-// LegacyPiDir is pi's own agent directory, used when pi runs outside pi-local.
-func LegacyPiDir() string { return filepath.Join(home(), ".pi", "agent") }
-
-// LegacyPiSessionDir holds the sessions of pi runs outside pi-local.
-func LegacyPiSessionDir() string { return filepath.Join(LegacyPiDir(), "sessions") }
-
-// LegacyPiSkillsDir is ordinary pi's own skill directory, the one
-// pi.LocalSkillsDir names in settings.json.
-func LegacyPiSkillsDir() string { return filepath.Join(LegacyPiDir(), "skills") }
-
-// AgentsSkillsDir is the harness-neutral ~/.agents/skills, which both Qwen Code
-// and pi read at user level straight from HOME. Pointing QWEN_HOME or
-// PI_CODING_AGENT_DIR at a managed instance directory does not move it, so
-// skills installed there reach qwen-local and pi-local without any settings
-// entry.
+// AgentsSkillsDir is the harness-neutral ~/.agents/skills, which both Qwen
+// Code and pi read at user level straight from HOME. No settings entry names
+// it, and neither QWEN_HOME nor PI_CODING_AGENT_DIR moves it.
 func AgentsSkillsDir() string { return filepath.Join(home(), ".agents", "skills") }
 
 // BinDir is ~/.local/bin, where setup.sh installs the launchers and lca.

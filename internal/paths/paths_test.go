@@ -1,102 +1,111 @@
 package paths
 
 import (
-	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 )
 
-func TestQwenUsageDirsIncludesInstances(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
-	// qwen-8082 has no usage directory yet and must be skipped.
-	for _, d := range []string{"qwen/usage", "qwen-9000/usage", "qwen-8081/usage", "qwen-8082"} {
-		if err := os.MkdirAll(filepath.Join(ConfigDir(), d), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	want := []string{
-		QwenUsageDir(),
-		filepath.Join(ConfigDir(), "qwen-8081", "usage"),
-		filepath.Join(ConfigDir(), "qwen-9000", "usage"),
-		LegacyQwenUsageDir(),
-	}
-	if got := QwenUsageDirs(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v want %v", got, want)
-	}
+// setHome points every path helper at a temporary directory.
+func setHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".state"))
+	t.Setenv("QWEN_HOME", "")
+	t.Setenv("PI_CODING_AGENT_DIR", "")
+	return home
 }
 
-func TestPiSessionDirsIncludesInstances(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
-	// pi-8082 has no sessions directory yet and must be skipped.
-	for _, d := range []string{"pi/sessions", "pi-9000/sessions", "pi-8081/sessions", "pi-8082"} {
-		if err := os.MkdirAll(filepath.Join(ConfigDir(), d), 0o755); err != nil {
-			t.Fatal(err)
-		}
+func TestHarnessDirsDefaultToTheHarnessOwnDirectories(t *testing.T) {
+	home := setHome(t)
+	cases := map[string]struct{ got, want string }{
+		"qwen dir":      {QwenDir(), filepath.Join(home, ".qwen")},
+		"qwen settings": {QwenSettings(), filepath.Join(home, ".qwen", "settings.json")},
+		"qwen usage":    {QwenUsageDir(), filepath.Join(home, ".qwen", "usage")},
+		"qwen skills":   {QwenSkillsDir(), filepath.Join(home, ".qwen", "skills")},
+		"pi dir":        {PiDir(), filepath.Join(home, ".pi", "agent")},
+		"pi models":     {PiModels(), filepath.Join(home, ".pi", "agent", "models.json")},
+		"pi sessions":   {PiSessionDir(), filepath.Join(home, ".pi", "agent", "sessions")},
+		"pi skills":     {PiSkillsDir(), filepath.Join(home, ".pi", "agent", "skills")},
+		"agents skills": {AgentsSkillsDir(), filepath.Join(home, ".agents", "skills")},
 	}
-	want := []string{
-		filepath.Join(PiDir(), "sessions"),
-		filepath.Join(ConfigDir(), "pi-8081", "sessions"),
-		filepath.Join(ConfigDir(), "pi-9000", "sessions"),
-		LegacyPiSessionDir(),
-	}
-	if got := PiSessionDirs(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v want %v", got, want)
-	}
-}
-
-func TestPiInstanceDirIsolatesOtherPorts(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
-	for _, tc := range []struct{ port, cfgPort, want string }{
-		{"", "8080", PiDir()},
-		{"8080", "8080", PiDir()},
-		{"9000", "8080", filepath.Join(ConfigDir(), "pi-9000")},
-	} {
-		if got := PiInstanceDir(tc.port, tc.cfgPort); got != tc.want {
-			t.Errorf("PiInstanceDir(%q, %q) = %q want %q", tc.port, tc.cfgPort, got, tc.want)
-		}
-	}
-	if got := PiModelsFor("9000", "8080"); got != filepath.Join(ConfigDir(), "pi-9000", "models.json") {
-		t.Errorf("PiModelsFor: %q", got)
-	}
-	if got := PiSettings(); got != filepath.Join(PiDir(), "settings.json") {
-		t.Errorf("PiSettings: %q", got)
-	}
-}
-
-func TestSkillDirs(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
-	for _, c := range []struct{ got, want string }{
-		{QwenSkillsDir(), filepath.Join(dir, "config", "llama-coder", "qwen", "skills")},
-		{PiSkillsDir(), filepath.Join(dir, "config", "llama-coder", "pi", "skills")},
-		{LegacyQwenSkillsDir(), filepath.Join(dir, ".qwen", "skills")},
-		{LegacyPiSkillsDir(), filepath.Join(dir, ".pi", "agent", "skills")},
-		// ~/.agents/skills follows HOME, not XDG_CONFIG_HOME: that is why
-		// moving QWEN_HOME or PI_CODING_AGENT_DIR never hides it.
-		{AgentsSkillsDir(), filepath.Join(dir, ".agents", "skills")},
-	} {
+	for name, c := range cases {
 		if c.got != c.want {
-			t.Errorf("got %s want %s", c.got, c.want)
+			t.Errorf("%s = %s, want %s", name, c.got, c.want)
 		}
 	}
-	// The tilde literals the harness settings carry must name these same dirs.
-	for _, c := range []struct{ literal, dir string }{
-		{"~/.qwen/skills", LegacyQwenSkillsDir()},
-		{"~/.pi/agent/skills", LegacyPiSkillsDir()},
-	} {
-		if got := Tildify(c.dir); got != c.literal {
-			t.Errorf("Tildify(%s) = %s, want %s", c.dir, got, c.literal)
+}
+
+// An exported QWEN_HOME or PI_CODING_AGENT_DIR is where the harness itself
+// reads its configuration, so it is the file lca must patch.
+func TestHarnessDirsFollowAnAbsoluteOverride(t *testing.T) {
+	setHome(t)
+	elsewhere := t.TempDir()
+	t.Setenv("QWEN_HOME", elsewhere)
+	t.Setenv("PI_CODING_AGENT_DIR", elsewhere)
+	cases := map[string]struct{ got, want string }{
+		"qwen dir":      {QwenDir(), elsewhere},
+		"qwen settings": {QwenSettings(), filepath.Join(elsewhere, "settings.json")},
+		"qwen usage":    {QwenUsageDir(), filepath.Join(elsewhere, "usage")},
+		"pi dir":        {PiDir(), elsewhere},
+		"pi models":     {PiModels(), filepath.Join(elsewhere, "models.json")},
+		"pi sessions":   {PiSessionDir(), filepath.Join(elsewhere, "sessions")},
+	}
+	for name, c := range cases {
+		if c.got != c.want {
+			t.Errorf("%s = %s, want %s", name, c.got, c.want)
 		}
+	}
+}
+
+// A relative override would resolve against each process's working directory,
+// so lca and the harness could disagree about which file is theirs.
+func TestHarnessDirsIgnoreARelativeOverride(t *testing.T) {
+	home := setHome(t)
+	t.Setenv("QWEN_HOME", "relative/qwen")
+	t.Setenv("PI_CODING_AGENT_DIR", "relative/pi")
+	if got, want := QwenDir(), filepath.Join(home, ".qwen"); got != want {
+		t.Errorf("QwenDir() = %s, want %s", got, want)
+	}
+	if got, want := PiDir(), filepath.Join(home, ".pi", "agent"); got != want {
+		t.Errorf("PiDir() = %s, want %s", got, want)
+	}
+}
+
+// AgentsSkillsDir is read from HOME by both harnesses, so no override moves it.
+func TestAgentsSkillsDirIgnoresHarnessOverrides(t *testing.T) {
+	home := setHome(t)
+	t.Setenv("QWEN_HOME", t.TempDir())
+	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+	if got, want := AgentsSkillsDir(), filepath.Join(home, ".agents", "skills"); got != want {
+		t.Errorf("AgentsSkillsDir() = %s, want %s", got, want)
+	}
+}
+
+func TestTildifyShortensOnlyUnderHome(t *testing.T) {
+	home := setHome(t)
+	cases := map[string]struct{ in, want string }{
+		"settings":    {QwenSettings(), "~/.qwen/settings.json"},
+		"pi models":   {PiModels(), "~/.pi/agent/models.json"},
+		"home itself": {home, "~"},
+		"outside":     {"/etc/hosts", "/etc/hosts"},
+		"prefix only": {home + "-other/x", home + "-other/x"},
+	}
+	for name, c := range cases {
+		if got := Tildify(c.in); got != c.want {
+			t.Errorf("%s: Tildify(%s) = %s, want %s", name, c.in, got, c.want)
+		}
+	}
+}
+
+// lca writes config.env and its own state under XDG, not in the harness dirs.
+func TestLcaOwnDirsStayUnderXdg(t *testing.T) {
+	home := setHome(t)
+	if got, want := Config(), filepath.Join(home, ".config", "llama-coder", "config.env"); got != want {
+		t.Errorf("Config() = %s, want %s", got, want)
+	}
+	if got, want := Timings(), filepath.Join(home, ".state", "llama-coder", "timings.jsonl"); got != want {
+		t.Errorf("Timings() = %s, want %s", got, want)
 	}
 }

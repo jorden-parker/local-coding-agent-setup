@@ -49,6 +49,12 @@ func Write(path string, data []byte) error {
 	return write(path, data, defaultOps())
 }
 
+// Target reports the real file a Write to path would replace, following a
+// symlinked file or parent directory, and the mode the replacement would get.
+// Callers that need to copy a file aside before lca patches it use this so the
+// copy lands next to the file itself rather than next to a link to it.
+func Target(path string) (string, fs.FileMode, error) { return resolve(path) }
+
 func write(path string, data []byte, o ops) error {
 	target, mode, err := resolve(path)
 	if err != nil {

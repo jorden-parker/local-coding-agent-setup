@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-func TestSyncCreatesFile(t *testing.T) {
+func TestPrepareCreatesFile(t *testing.T) {
 	p := filepath.Join(t.TempDir(), ".qwen", "settings.json")
-	changed, err := Sync(p, ProviderFor("qwen3.5-9b", 8080, 65536))
+	changed, err := Prepare(p, ProviderFor("qwen3.5-9b", 8080, 65536))
 	if err != nil || !changed {
 		t.Fatal(err, changed)
 	}
@@ -29,13 +29,13 @@ func TestSyncCreatesFile(t *testing.T) {
 	if e != want {
 		t.Errorf("entry %+v want %+v", e, want)
 	}
-	changed, err = Sync(p, want)
+	changed, err = Prepare(p, want)
 	if err != nil || changed {
 		t.Errorf("second sync changed=%v err=%v", changed, err)
 	}
 }
 
-func TestSyncMergesAndKeepsOtherKeys(t *testing.T) {
+func TestPrepareMergesAndKeepsOtherKeys(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "settings.json")
 	orig := `{"ui":{"autoModeAcknowledged":true},"$version":7,"privacy":{"usageStatisticsEnabled":false},
 "modelProviders":{"openai":[
@@ -43,7 +43,7 @@ func TestSyncMergesAndKeepsOtherKeys(t *testing.T) {
   {"id":"qwen3.5-9b","name":"old","baseUrl":"http://127.0.0.1:8080/v1","custom":"mine","generationConfig":{"contextWindowSize":1,"temperature":0.1}}
 ],"anthropic":[{"id":"a"}]}}`
 	_ = os.WriteFile(p, []byte(orig), 0o600)
-	if _, err := Sync(p, ProviderFor("qwen3.5-9b", 9000, 4096)); err != nil {
+	if _, err := Prepare(p, ProviderFor("qwen3.5-9b", 9000, 4096)); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)

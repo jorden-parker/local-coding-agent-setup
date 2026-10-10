@@ -70,6 +70,11 @@ func putState(m map[string]any, path string, s settingState) {
 	}
 }
 
+// SnapshotFor is where ApplyLean saves the settings it is about to change,
+// so RestoreLean can put them back. Its presence beside a settings file is
+// also how lca reports whether the lean profile is currently applied.
+func SnapshotFor(settingsPath string) string { return settingsPath + ".lca-lean.json" }
+
 func writeJSON(path string, value any) error {
 	b, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
