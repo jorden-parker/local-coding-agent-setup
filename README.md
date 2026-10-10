@@ -182,7 +182,10 @@ provider entry is under `modelProviders.openai[]` with `id` = `ALIAS`, `name` =
 preserving unrelated settings, and adds `~/.qwen/skills` to `skills.directories` (Qwen Code
 0.21+) so `qwen-local` offers the same user skills as ordinary `qwen`, including anything
 linked there from `~/.agents/skills`; existing entries in that list are kept, and the lean
-profile for ordinary `qwen` never touches it. `qwen-local` sets `QWEN_HOME` to this dedicated directory and
+profile for ordinary `qwen` never touches it. `~/.agents/skills` itself needs no entry: Qwen
+Code reads it at user level straight from `HOME`, so `QWEN_HOME` pointing at the managed
+directory never hides it. `lca doctor`'s `qwen skills` check counts the skills in all three
+roots, which is how you tell a stale symlink farm in `~/.qwen/skills` from a real gap. `qwen-local` sets `QWEN_HOME` to this dedicated directory and
 passes explicit model, auth, base URL, and API key flags, so saved choices from ordinary `qwen`
 cannot select another model. Each such directory's `ide/` is a symlink to `~/.qwen/ide` (or to `ide/` under a
 `QWEN_HOME` already set in your shell), where the VS Code companion extension writes the
@@ -206,8 +209,11 @@ forms, for configs edited by hand.
 `models.json`, `settings.json` and the sessions of local runs, so your `~/.pi/agent` — its
 credentials, model selection and session history — is never written to. The cost is that pi's
 extensions, themes and keybindings do not carry over; skills do, because `settings.json` lists
-`~/.pi/agent/skills`. An inherited `PI_CODING_AGENT_SESSION_DIR` is cleared, so sessions stay
-where `lca stats` can read them.
+`~/.pi/agent/skills`, and because pi reads `~/.agents/skills` at user level straight from `HOME`
+— `PI_CODING_AGENT_DIR` does not move that one, and it needs no entry. `lca doctor`'s
+`pi skills` check counts the skills in all three roots, so a `~/.pi/agent/skills` symlink farm
+that an installer left stale is visible rather than mysterious. An inherited
+`PI_CODING_AGENT_SESSION_DIR` is cleared, so sessions stay where `lca stats` can read them.
 
 `lca sync --harness pi` writes the provider entry in `models.json`:
 `providers.llama-local` with `name` = `<ALIAS> (local llama.cpp)`, `api` =

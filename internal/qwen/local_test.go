@@ -34,7 +34,7 @@ func TestPrepareLocalSelectionLeanAndDrift(t *testing.T) {
 			t.Fatalf("%s: %#v %v", key, got, err)
 		}
 	}
-	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{localSkillsDir}) {
+	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{LocalSkillsDir}) {
 		t.Fatalf("skills.directories: %#v", dirs)
 	}
 	m["model"].(map[string]any)["name"] = "remote"
@@ -68,7 +68,7 @@ func TestPrepareLocalSelectionLeanAndDrift(t *testing.T) {
 	if m["ui"].(map[string]any)["theme"] != "mine" || !reflect.DeepEqual(m["tools"].(map[string]any)["disabled"], []any{"web_fetch", "agent"}) {
 		t.Fatal("unrelated settings lost")
 	}
-	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{"/shared/skills", localSkillsDir}) {
+	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{"/shared/skills", LocalSkillsDir}) {
 		t.Fatalf("existing skills.directories not kept: %#v", dirs)
 	}
 }
@@ -84,7 +84,7 @@ func TestPrepareLocalKeepsExistingSkillsDirectories(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _, _ := loadSettings(path)
-	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{"/shared/skills", localSkillsDir}) {
+	if dirs := m["skills"].(map[string]any)["directories"]; !reflect.DeepEqual(dirs, []any{"/shared/skills", LocalSkillsDir}) {
 		t.Fatalf("skills.directories: %#v", dirs)
 	}
 	if changed, err := PrepareLocal(path, p); err != nil || changed {

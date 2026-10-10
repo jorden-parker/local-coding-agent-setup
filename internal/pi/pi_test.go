@@ -116,7 +116,7 @@ func TestPrepareSettingsOwnsOnlySelectionAndSkills(t *testing.T) {
 		t.Fatalf("selection: %+v", m)
 	}
 	skills := m["skills"].([]any)
-	if len(skills) != 2 || skills[0] != "~/work/skills" || skills[1] != localSkillsDir {
+	if len(skills) != 2 || skills[0] != "~/work/skills" || skills[1] != LocalSkillsDir {
 		t.Fatalf("skills: %+v", skills)
 	}
 	if changed, err := PrepareSettings(path, p); err != nil || changed {

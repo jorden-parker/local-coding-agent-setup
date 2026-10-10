@@ -5,12 +5,12 @@ import (
 	"fmt"
 )
 
-// localSkillsDir is added to skills.directories so qwen-local offers the same
+// LocalSkillsDir is added to skills.directories so qwen-local offers the same
 // user skills as ordinary qwen, whose default skill directory this is. Qwen
 // Code (0.21+) expands "~" itself; keeping the tilde makes settings.json
 // portable across HOMEs. The default $QWEN_HOME/skills stays first and Qwen
 // deduplicates skill names, so this never shadows a locally installed skill.
-const localSkillsDir = "~/.qwen/skills"
+const LocalSkillsDir = "~/.qwen/skills"
 
 // PrepareLocal owns model selection, lean defaults and the shared skills
 // directory in the dedicated local configuration. Unlike ApplyLean, it needs
@@ -85,7 +85,7 @@ func prepareLocal(m map[string]any, p Provider) error {
 	for path, value := range values {
 		putState(m, path, settingState{Present: true, Value: value})
 	}
-	if err := addSkillsDir(m, localSkillsDir); err != nil {
+	if err := addSkillsDir(m, LocalSkillsDir); err != nil {
 		return err
 	}
 

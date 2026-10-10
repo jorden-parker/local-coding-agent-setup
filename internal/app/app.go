@@ -304,13 +304,18 @@ func Doctor() []Check {
 		if err := qwen.CheckLocal(paths.QwenSettings(), want); err != nil {
 			add("qwen local profile", false, err.Error()+"; run lca sync")
 		} else {
-			add("qwen local profile", true, "lean, openai, "+want.ID+", skills ~/.qwen/skills in "+paths.Tildify(paths.QwenSettings()))
+			add("qwen local profile", true, "lean, openai, "+want.ID+", skills "+qwen.LocalSkillsDir+" in "+paths.Tildify(paths.QwenSettings()))
 		}
 		if err := qwen.CheckShared(paths.LegacyQwenSettings(), want); err != nil {
 			add("qwen shared provider", false, err.Error()+"; run lca sync")
 		} else {
 			add("qwen shared provider", true, want.ID+" listed for ordinary qwen and the VS Code companion in "+paths.Tildify(paths.LegacyQwenSettings()))
 		}
+	}
+	if detail, total := skillRoots(paths.QwenSkillsDir(), paths.AgentsSkillsDir(), paths.LegacyQwenSkillsDir()); total == 0 {
+		warn("qwen skills", "no SKILL.md in "+detail)
+	} else {
+		add("qwen skills", true, detail)
 	}
 	if on, err := qwen.UsageStatsEnabled(paths.QwenSettings()); err != nil {
 		add("qwen usage stats", false, err.Error())
@@ -378,8 +383,48 @@ func addPiChecks(f *config.File, values map[string]string, add func(string, bool
 	if err := pi.CheckSettings(paths.PiSettings(), want); err != nil {
 		add("pi local profile", false, err.Error()+"; run lca sync --harness pi")
 	} else {
-		add("pi local profile", true, want.ID+", skills "+paths.Tildify(paths.LegacyPiDir())+"/skills in "+paths.Tildify(paths.PiSettings()))
+		add("pi local profile", true, want.ID+", skills "+pi.LocalSkillsDir+" in "+paths.Tildify(paths.PiSettings()))
 	}
+	if detail, total := skillRoots(paths.PiSkillsDir(), paths.AgentsSkillsDir(), paths.LegacyPiSkillsDir()); total == 0 {
+		warn("pi skills", "no SKILL.md in "+detail)
+	} else {
+		add("pi skills", true, detail)
+	}
+}
+
+// skillRoots describes the user-level skill directories a harness reads, in
+// that order, with the number of skills each holds. The managed instance
+// directory is listed first because it is the one the harness treats as its
+// own, and it is normally empty; the other two are what qwen-local and pi-local
+// actually offer. The returned count only answers "anything anywhere?": the
+// roots overlap, because a harness skill directory is commonly a symlink farm
+// pointing into ~/.agents/skills.
+func skillRoots(dirs ...string) (string, int) {
+	parts := make([]string, 0, len(dirs))
+	total := 0
+	for _, dir := range dirs {
+		n := countSkills(dir)
+		total += n
+		parts = append(parts, fmt.Sprintf("%d in %s", n, paths.Tildify(dir)))
+	}
+	return strings.Join(parts, ", "), total
+}
+
+// countSkills counts the immediate subdirectories of dir holding a SKILL.md,
+// following symlinks. Both harnesses also look deeper, so this is a floor
+// rather than a census: enough to tell an empty root from a populated one.
+func countSkills(dir string) int {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		if info, err := os.Stat(filepath.Join(dir, e.Name(), "SKILL.md")); err == nil && info.Mode().IsRegular() {
+			n++
+		}
+	}
+	return n
 }
 
 // Failed reports whether any check failed outright.

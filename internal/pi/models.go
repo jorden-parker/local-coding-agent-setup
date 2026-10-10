@@ -2,11 +2,11 @@ package pi
 
 import "fmt"
 
-// localSkillsDir is added to settings.skills so pi-local offers the same user
+// LocalSkillsDir is added to settings.skills so pi-local offers the same user
 // skills as ordinary pi, whose default skill directory this is. pi expands "~"
 // itself in resource paths, so keeping the tilde makes settings.json portable
 // across HOMEs.
-const localSkillsDir = "~/.pi/agent/skills"
+const LocalSkillsDir = "~/.pi/agent/skills"
 
 // PrepareModels owns providers.llama-local in pi's models.json: the
 // OpenAI-compatible endpoint of the local llama-server and the one model it
@@ -91,7 +91,7 @@ func mergeProvider(m map[string]any, p Provider) error {
 func prepareSettings(m map[string]any, p Provider) error {
 	m["defaultProvider"] = p.ID
 	m["defaultModel"] = p.Model
-	return addSkillsDir(m, localSkillsDir)
+	return addSkillsDir(m, LocalSkillsDir)
 }
 
 // addSkillsDir appends dir to settings.skills unless already listed, keeping

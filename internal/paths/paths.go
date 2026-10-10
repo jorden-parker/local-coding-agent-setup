@@ -73,6 +73,12 @@ func QwenSettingsFor(port, cfgPort string) string {
 	return filepath.Join(QwenInstanceDir(port, cfgPort), "settings.json")
 }
 
+// QwenSkillsDir is the managed instance's own skill directory, which Qwen Code
+// reads as $QWEN_HOME/skills. It starts empty: qwen-local's skills come from
+// AgentsSkillsDir and the LegacyQwenSkillsDir entry lca sync writes into
+// settings.json.
+func QwenSkillsDir() string { return filepath.Join(QwenDir(), "skills") }
+
 // QwenUsageDir holds Qwen Code's token-usage-YYYY-MM.jsonl files.
 func QwenUsageDir() string { return filepath.Join(QwenDir(), "usage") }
 
@@ -88,6 +94,10 @@ func LegacyQwenDir() string { return filepath.Join(home(), ".qwen") }
 func LegacyQwenSettings() string { return filepath.Join(LegacyQwenDir(), "settings.json") }
 
 func LegacyQwenUsageDir() string { return filepath.Join(LegacyQwenDir(), "usage") }
+
+// LegacyQwenSkillsDir is ordinary qwen's own skill directory, the one
+// qwen.LocalSkillsDir names in settings.json.
+func LegacyQwenSkillsDir() string { return filepath.Join(LegacyQwenDir(), "skills") }
 
 // PiDir holds the managed pi-local agent directory, which pi-local points
 // PI_CODING_AGENT_DIR at. It is separate from the user's own ~/.pi/agent.
@@ -112,6 +122,12 @@ func PiSettingsFor(port, cfgPort string) string {
 	return filepath.Join(PiInstanceDir(port, cfgPort), "settings.json")
 }
 
+// PiSkillsDir is the managed instance's own skill directory, which pi reads as
+// $PI_CODING_AGENT_DIR/skills. It starts empty: pi-local's skills come from
+// AgentsSkillsDir and the LegacyPiSkillsDir entry lca sync writes into
+// settings.json.
+func PiSkillsDir() string { return filepath.Join(PiDir(), "skills") }
+
 // PiSessionDirs lists every directory lca stats reads pi sessions from: the
 // default instance's, every pi-<port> instance pi-local has created (sorted by
 // name), then the user's own ~/.pi/agent one. Earlier entries win for
@@ -123,6 +139,17 @@ func LegacyPiDir() string { return filepath.Join(home(), ".pi", "agent") }
 
 // LegacyPiSessionDir holds the sessions of pi runs outside pi-local.
 func LegacyPiSessionDir() string { return filepath.Join(LegacyPiDir(), "sessions") }
+
+// LegacyPiSkillsDir is ordinary pi's own skill directory, the one
+// pi.LocalSkillsDir names in settings.json.
+func LegacyPiSkillsDir() string { return filepath.Join(LegacyPiDir(), "skills") }
+
+// AgentsSkillsDir is the harness-neutral ~/.agents/skills, which both Qwen Code
+// and pi read at user level straight from HOME. Pointing QWEN_HOME or
+// PI_CODING_AGENT_DIR at a managed instance directory does not move it, so
+// skills installed there reach qwen-local and pi-local without any settings
+// entry.
+func AgentsSkillsDir() string { return filepath.Join(home(), ".agents", "skills") }
 
 // BinDir is ~/.local/bin, where setup.sh installs the launchers and lca.
 func BinDir() string { return filepath.Join(home(), ".local", "bin") }

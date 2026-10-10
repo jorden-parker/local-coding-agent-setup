@@ -71,3 +71,32 @@ func TestPiInstanceDirIsolatesOtherPorts(t *testing.T) {
 		t.Errorf("PiSettings: %q", got)
 	}
 }
+
+func TestSkillDirs(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
+	for _, c := range []struct{ got, want string }{
+		{QwenSkillsDir(), filepath.Join(dir, "config", "llama-coder", "qwen", "skills")},
+		{PiSkillsDir(), filepath.Join(dir, "config", "llama-coder", "pi", "skills")},
+		{LegacyQwenSkillsDir(), filepath.Join(dir, ".qwen", "skills")},
+		{LegacyPiSkillsDir(), filepath.Join(dir, ".pi", "agent", "skills")},
+		// ~/.agents/skills follows HOME, not XDG_CONFIG_HOME: that is why
+		// moving QWEN_HOME or PI_CODING_AGENT_DIR never hides it.
+		{AgentsSkillsDir(), filepath.Join(dir, ".agents", "skills")},
+	} {
+		if c.got != c.want {
+			t.Errorf("got %s want %s", c.got, c.want)
+		}
+	}
+	// The tilde literals the harness settings carry must name these same dirs.
+	for _, c := range []struct{ literal, dir string }{
+		{"~/.qwen/skills", LegacyQwenSkillsDir()},
+		{"~/.pi/agent/skills", LegacyPiSkillsDir()},
+	} {
+		if got := Tildify(c.dir); got != c.literal {
+			t.Errorf("Tildify(%s) = %s, want %s", c.dir, got, c.literal)
+		}
+	}
+}
